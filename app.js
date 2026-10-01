@@ -166,7 +166,7 @@ function updateStats() {
   $('stRec').textContent = recording ? `${(rec.ch[0].length / RATE).toFixed(0)} s` : '—';
   // per-channel peak-to-peak over last second
   const n = Math.min(filled, RATE); const pp = [];
-  for (let c = 0; c < 4; c++) { let mn = Infinity, mx = -Infinity; for (let k = 0; k < n; k++) { const v = rings[c][(head - 1 - k + rings[c].length) % rings[c].length]; if (v < mn) mn = v; if (v > mx) mx = v; } pp.push(n ? (mx - mn).toFixed(0) : '—'); }
+  for (let c = 0; c < showCh; c++) { let mn = Infinity, mx = -Infinity; for (let k = 0; k < n; k++) { const v = rings[c][(head - 1 - k + rings[c].length) % rings[c].length]; if (v < mn) mn = v; if (v > mx) mx = v; } pp.push(n ? (mx - mn).toFixed(0) : '—'); }
   $('stPP').textContent = pp.map((v, i) => `${CH_NAMES[i]} ${v}`).join('  ');
 }
 
@@ -174,6 +174,12 @@ function updateStats() {
 const canvas = $('chart'); const ctx = canvas.getContext('2d');
 let scaleUv = 200; // ± µV per channel lane
 $('scale').addEventListener('change', (e) => { scaleUv = +e.target.value; });
+// 2ch (FP1/FP2) or 4ch (FP1/FP2/ECG/ROC) display; recording always keeps the full EDF layout
+let showCh = 4;
+try { showCh = localStorage.getItem('h3live.showCh') === '2' ? 2 : 4; } catch {}
+function setShowCh(n) { showCh = n; $('btnCh').textContent = n + 'ch'; try { localStorage.setItem('h3live.showCh', String(n)); } catch {} }
+$('btnCh').onclick = () => setShowCh(showCh === 4 ? 2 : 4);
+setShowCh(showCh);
 function draw() {
   const dpr = devicePixelRatio || 1;
   const W = canvas.clientWidth, H = canvas.clientHeight;
@@ -181,7 +187,7 @@ function draw() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const dark = matchMedia('(prefers-color-scheme: dark)').matches;
   ctx.fillStyle = dark ? '#0f1419' : '#fff'; ctx.fillRect(0, 0, W, H);
-  const lanes = 4, laneH = H / lanes, len = rings[0].length;
+  const lanes = showCh, laneH = H / lanes, len = rings[0].length;
   ctx.font = '12px system-ui'; ctx.textBaseline = 'top';
   for (let c = 0; c < lanes; c++) {
     const y0 = c * laneH;
