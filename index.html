@@ -115,6 +115,16 @@ dialog .row button{flex:1}
   <p class="note">顯示用 0.5 Hz 高通去直流；錄製存原始值。EDF 與 H3 記憶卡／Sleepwell H3rec 相同格式。報告需錄 ≥30 秒，建議清醒閉眼靜坐 3 分鐘。</p>
 </div>
 
+<dialog id="stopDlg">
+  <h2>錄製完成 <span id="stopSecs" style="font-weight:400;color:var(--muted);font-size:13px"></span></h2>
+  <p style="margin:0 0 6px;font-size:13px;color:var(--muted)">要怎麼處理這段錄音？之後仍可按「產生腦健康報告」。</p>
+  <div class="row" style="flex-direction:column">
+    <button id="stopSaveEdf" type="button">儲存 EDF 檔</button>
+    <button id="stopReport" type="button" style="background:#2457a8;color:#fff;border:none;font-weight:600">直接產生報告</button>
+    <button id="stopLater" type="button">稍後再說</button>
+  </div>
+</dialog>
+
 <dialog id="reportDlg">
   <h2>腦健康報告</h2>
   <label>姓名<input id="rpName" placeholder="未命名" autocomplete="off"></label>

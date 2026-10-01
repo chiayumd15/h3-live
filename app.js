@@ -234,11 +234,20 @@ function stopRecording() {
   const secs = Math.floor(rec.ch[0].length / RATE);
   if (secs < 1) { log('錄製不足 1 秒，不存檔', 'warn'); return; }
   lastRec = rec; setButtons();
-  if (secs < 30) log('報告需要至少 30 秒的錄製', 'warn'); else log('可按「產生腦健康報告」', 'ok');
-  const blob = buildEdf(rec, secs);
-  const name = `H3_${(device?.name || 'h3').replace(/\W+/g, '')}_${fmtDate(rec.t0)}.edf`;
+  log(`錄製完成 ${secs} 秒`, 'ok');
+  $('stopSecs').textContent = `${secs} 秒`;
+  $('stopReport').disabled = secs < 30; $('stopReport').textContent = secs < 30 ? '直接產生報告（需 ≥30 秒）' : '直接產生報告';
+  $('stopDlg').showModal();
+}
+function saveLastEdf() {
+  const secs = Math.floor(lastRec.ch[0].length / RATE);
+  const blob = buildEdf(lastRec, secs);
+  const name = `H3_${(device?.name || 'h3').replace(/\W+/g, '')}_${fmtDate(lastRec.t0)}.edf`;
   saveFile(name, blob).then((m) => log(`${m}（${secs} 秒）`, 'ok')).catch((e) => log(`存檔失敗：${e.message}`, 'err'));
 }
+$('stopSaveEdf').onclick = () => { $('stopDlg').close(); saveLastEdf(); };
+$('stopReport').onclick = () => { $('stopDlg').close(); $('btnReport').click(); };
+$('stopLater').onclick = () => $('stopDlg').close();
 const pad = (n, w = 2) => String(n).padStart(w, '0');
 const fmtDate = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 function buildEdf(r, secs) {
