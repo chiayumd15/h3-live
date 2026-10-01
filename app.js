@@ -184,11 +184,7 @@ try { showCh = localStorage.getItem('h3live.showCh') === '2' ? 2 : 4; } catch {}
 function setShowCh(n) { showCh = n; $('btnCh').textContent = n + 'ch'; try { localStorage.setItem('h3live.showCh', String(n)); } catch {} }
 $('btnCh').onclick = () => setShowCh(showCh === 4 ? 2 : 4);
 setShowCh(showCh);
-let showAcc = true;
-try { showAcc = localStorage.getItem('h3live.showAcc') !== '0'; } catch {}
-function setShowAcc(v) { showAcc = v; $('btnAcc').classList.toggle('off', !v); try { localStorage.setItem('h3live.showAcc', v ? '1' : '0'); } catch {} }
-$('btnAcc').onclick = () => setShowAcc(!showAcc);
-setShowAcc(showAcc);
+const showAcc = true; // X/Y/Z lanes always shown
 function draw() {
   const dpr = devicePixelRatio || 1;
   const W = canvas.clientWidth, H = canvas.clientHeight;
