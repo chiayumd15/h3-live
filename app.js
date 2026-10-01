@@ -48,20 +48,21 @@ function setButtons() {
 }
 
 // ---------- BLE ----------
-async function connect() {
+async function connect(all = false) {
   if (!navigator.bluetooth) { log('此瀏覽器不支援 Web Bluetooth。Android 請用 Chrome；iPhone 的 Safari 不支援。', 'err'); return; }
   try {
     setStatus('選擇裝置…', 'wait');
-    device = await navigator.bluetooth.requestDevice({
-      filters: [{ services: [SERVICE] }, { namePrefix: 'xb5' }, { namePrefix: 'XB5' }],
-      optionalServices: [SERVICE],
-    });
+    log(all ? '開啟裝置清單（顯示全部 BLE 裝置）…' : '開啟裝置清單（只列 xb5… / FFF0 服務）…');
+    device = await navigator.bluetooth.requestDevice(all
+      ? { acceptAllDevices: true, optionalServices: [SERVICE] }
+      : { filters: [{ services: [SERVICE] }, { namePrefix: 'xb5' }, { namePrefix: 'XB5' }, { namePrefix: 'H3' }], optionalServices: [SERVICE] });
     log(`選到裝置：${device.name || '(無名稱)'} id=${device.id}`);
     device.addEventListener('gattserverdisconnected', onDisconnected);
     userStopped = false;
     await openStream();
   } catch (e) {
-    if (e.name === 'NotFoundError') { log('沒有選擇裝置（已取消）'); setStatus('未連線', 'off'); }
+    if (e.name === 'NotFoundError') { log('沒有選擇裝置（已取消或清單中沒有符合的裝置）。若清單是空的，請改按「全部裝置」。', 'warn'); setStatus('未連線', 'off'); }
+    else if (e.name === 'SecurityError') { log(`被瀏覽器拒絕：${e.message}（需要 HTTPS 與使用者點擊；PWA 請用 Chrome 開啟）`, 'err'); setStatus('連線失敗', 'err'); }
     else { log(`連線失敗：${e.name}: ${e.message}`, 'err'); setStatus('連線失敗', 'err'); }
     setButtons();
   }
@@ -280,13 +281,18 @@ function buildEdf(r, secs) {
 }
 
 // ---------- wiring ----------
-$('btnConnect').onclick = connect;
+$('btnConnect').onclick = () => connect(false);
+$('btnConnectAll').onclick = () => connect(true);
 $('btnDisconnect').onclick = disconnect;
 $('btnRec').onclick = () => (recording ? stopRecording() : startRecording());
 $('btnClear').onclick = () => (logEl.innerHTML = '');
 setButtons(); setInterval(updateStats, 500); requestAnimationFrame(draw);
 if (!navigator.bluetooth) { setStatus('此瀏覽器不支援 Web Bluetooth', 'err'); log('需要 Android Chrome（或 Mac/Windows 的 Chrome、Edge）。iPhone Safari 不支援。', 'err'); }
-else log('就緒。開啟 H3 電源後按「連線」，在清單中選 xb5… 裝置。');
+else {
+  log('就緒。開啟 H3 電源後按「連線」，在清單中選 xb5… 裝置。');
+  navigator.bluetooth.getAvailability?.().then(ok => log(ok ? '藍牙介面可用' : '藍牙介面不可用：請確認手機藍牙已開啟', ok ? 'ok' : 'err')).catch(() => {});
+  log(`瀏覽器：${navigator.userAgent.replace(/^.*?\) /, '').slice(0, 80)}`);
+}
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
 
 // ---------- simulation (?sim): replay a captured H3 stream without hardware ----------
