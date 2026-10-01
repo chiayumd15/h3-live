@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>H3 Live</title>
+<meta name="description" content="用手機藍牙直接連 H3 腦波儀，即時看波形、錄製 EDF">
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#0f1419">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./icon.svg">
+<style>
+:root{--bg:#f6f7f9;--fg:#111827;--muted:#6b7280;--card:#fff;--line:#e5e7eb;--accent:#2563eb}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0b0f14;--fg:#e5e7eb;--muted:#9aa4b2;--card:#141a21;--line:#2a3440;--accent:#60a5fa}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Noto Sans TC",sans-serif;padding:12px 16px calc(16px + env(safe-area-inset-bottom))}
+h1{font-size:18px;margin:0 0 8px;display:flex;align-items:center;gap:10px}
+.status{font-size:13px;padding:2px 10px;border-radius:999px;background:var(--line)}
+.status.on{background:#16a34a;color:#fff}.status.err{background:#dc2626;color:#fff}.status.wait{background:#f59e0b;color:#111}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+button{font:inherit;padding:10px 14px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--fg);cursor:pointer}
+button:disabled{opacity:.45;cursor:default}
+#btnConnect{background:var(--accent);color:#fff;border-color:transparent}#btnRec{color:#dc2626;font-weight:600}
+select{font:inherit;padding:8px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--fg)}
+#chart{width:100%;height:46vh;min-height:260px;border:1px solid var(--line);border-radius:12px;background:var(--card);display:block;touch-action:none}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px 12px;font-size:13px;margin:10px 0}
+.stats div span{color:var(--muted);display:block;font-size:11px}
+#log{font:12px/1.5 ui-monospace,Menlo,monospace;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 10px;height:180px;overflow:auto;white-space:pre-wrap;word-break:break-all}
+#log .err{color:#dc2626}#log .warn{color:#d97706}#log .ok{color:#16a34a}
+small{color:var(--muted)}
+.wrap{display:contents}
+@media (orientation:landscape) and (max-height:600px){
+  body{padding:8px 12px;height:100vh;overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr) 300px;grid-template-rows:auto minmax(0,1fr);gap:6px 12px}
+  h1{grid-column:1/-1;margin:0;font-size:16px}
+  #chart{grid-column:1;grid-row:2;height:100%;min-height:0}
+  .side{grid-column:2;grid-row:2;display:flex;flex-direction:column;min-height:0;gap:6px;overflow:auto}
+  .side .row{margin:0}.side button{padding:8px 10px;font-size:13px}
+  .stats{grid-template-columns:1fr 1fr;gap:4px 8px;font-size:12px;margin:0}
+  #log{height:auto;flex:1;min-height:60px;font-size:11px}
+  .note{display:none}
+}
+</style>
+</head>
+<body>
+<h1>H3 Live <span id="status" class="status off">未連線</span></h1>
+<canvas id="chart"></canvas>
+<div class="side">
+<div class="row">
+  <button id="btnConnect">連線 H3</button>
+  <button id="btnDisconnect" disabled>斷線</button>
+  <button id="btnRec" disabled>● 開始錄製</button>
+  <select id="scale" title="每軌振幅">
+    <option value="50">±50 µV</option><option value="100">±100 µV</option><option value="200" selected>±200 µV</option><option value="500">±500 µV</option><option value="2000">±2000 µV</option>
+  </select>
+</div>
+<div class="stats">
+  <div><span>樣本數</span><b id="stSamples">0</b></div>
+  <div><span>實際取樣率</span><b id="stRate">—</b></div>
+  <div><span>通知 / 位元組</span><b id="stNotif">0</b></div>
+  <div><span>區塊 / 丟失 / 校驗錯 / 框錯</span><b id="stBlocks">—</b></div>
+  <div><span>電池</span><b id="stBat">—</b></div>
+  <div><span>錄製</span><b id="stRec">—</b></div>
+  <div style="grid-column:1/-1"><span>最近 1 秒峰對峰 (µV)</span><b id="stPP">—</b></div>
+</div>
+<div class="row" style="justify-content:space-between;align-items:center"><small>紀錄</small><button id="btnClear" style="padding:4px 10px;font-size:12px">清除</button></div>
+<div id="log"></div>
+<p class="note"><small>顯示用 0.5 Hz 高通去直流；錄製存原始值。EDF 格式與 H3 記憶卡/Sleepwell H3rec 相同（EEG1–4 250 Hz、X/Y/Z 50 Hz）。</small></p>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

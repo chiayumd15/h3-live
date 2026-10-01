@@ -1,0 +1,16 @@
+import { readFileSync } from 'node:fs';
+import { H3Parser } from '../h3parser.js';
+const data = new Uint8Array(readFileSync(new URL('./h3_stream_sample.bin', import.meta.url)));
+const p = new H3Parser(); const out = [];
+for (let i = 0; i < data.length; i += 13) p.feed(data.subarray(i, i + 13), out);
+const blocks = out.filter(e => e.type === 'block'), lines = out.filter(e => e.type === 'line').map(e => e.text);
+const ok = (c, msg) => { if (!c) { console.error('FAIL:', msg); process.exitCode = 1; } else console.log('ok  ', msg); };
+ok(blocks.length === 38, `38 blocks (got ${blocks.length})`);
+ok(p.stats.checksumErrors === 1 && blocks.filter(b => !b.checksumOk).length === 1, 'exactly 1 checksum error');
+ok(p.stats.lostBlocks === 0, 'no lost blocks');
+ok(JSON.stringify(blocks[0].div) === '[1,1,1,1,5,5,5]', 'divisors 1,1,1,1,5,5,5');
+ok(blocks[0].n === 30 && blocks[0].channels[0].length === 30 && blocks[0].channels[4].length === 6, 'N=30, ch0 30 samples, ch4 6 samples');
+ok(lines.includes('TI=000004'), 'interleaved TI line recovered');
+ok(lines.some(l => l.startsWith('RT=')) && lines.some(l => l.startsWith('BAT=')), 'RT and BAT lines');
+ok(blocks.every((b, i) => i === 0 || ((blocks[i-1].counter + 1) & 0xffff) === b.counter), 'counters consecutive');
+console.log('sample ch0 first 8 (LSB):', Array.from(blocks[1].channels[0].slice(0, 8)));
