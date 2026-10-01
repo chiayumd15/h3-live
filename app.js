@@ -43,7 +43,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 function setStatus(text, cls) { const s = $('status'); s.textContent = text; s.className = 'status ' + cls; }
 function setButtons() {
   const connected = !!(server && server.connected) || simMode;
-  $('btnConnect').disabled = connected; $('btnDisconnect').disabled = !connected;
+  $('btnConnect').disabled = connected; $('btnConnectAll').disabled = connected; $('btnDisconnect').disabled = !connected;
   $('btnRec').disabled = !connected; $('btnRec').textContent = recording ? '■ 停止並下載 EDF' : '● 開始錄製';
 }
 
