@@ -41,6 +41,10 @@ small{color:var(--muted)}
 </style>
 </head>
 <body>
+<div id="browserWarn" style="display:none;grid-column:1/-1;background:#dc2626;color:#fff;padding:10px 14px;border-radius:10px;margin-bottom:8px;font-size:14px;line-height:1.5">
+  目前是<b>三星瀏覽器</b>，它的藍牙清單永遠是空的。請改用 Chrome 開啟這個網頁，並在 Chrome 裡「加到主畫面」。
+  <div style="margin-top:8px"><a id="openChrome" href="#" style="display:inline-block;background:#fff;color:#dc2626;font-weight:700;padding:8px 14px;border-radius:8px;text-decoration:none">用 Chrome 開啟</a></div>
+</div>
 <h1>H3 Live <span id="status" class="status off">未連線</span></h1>
 <canvas id="chart"></canvas>
 <div class="side">

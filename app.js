@@ -283,6 +283,11 @@ $('btnDisconnect').onclick = disconnect;
 $('btnRec').onclick = () => (recording ? stopRecording() : startRecording());
 $('btnClear').onclick = () => (logEl.innerHTML = '');
 setButtons(); setInterval(updateStats, 500); requestAnimationFrame(draw);
+if (/SamsungBrowser/i.test(navigator.userAgent)) {
+  $('browserWarn').style.display = 'block';
+  $('openChrome').href = `intent://${location.host}${location.pathname}${location.search}#Intent;scheme=https;package=com.android.chrome;end`;
+  log('偵測到三星瀏覽器：Web Bluetooth 無法掃描，請用 Chrome 開啟', 'err');
+}
 if (!navigator.bluetooth) { setStatus('此瀏覽器不支援 Web Bluetooth', 'err'); log('需要 Android Chrome（或 Mac/Windows 的 Chrome、Edge）。iPhone Safari 不支援。', 'err'); }
 else {
   log('就緒。開啟 H3 電源後按「連線」，在清單中選 xb5… 裝置。');
