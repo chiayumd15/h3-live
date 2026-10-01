@@ -1,5 +1,7 @@
 import { H3Parser } from './h3parser.js';
 import { buildReport } from './report/reportHtml.js';
+import { createBle, isNative } from './ble.js';
+import { saveFile, keepAwake } from './platform.js';
 
 const SERVICE = 0xfff0, CH_DATA = 0xfff5, CH_CMD = 0xfff6;
 const MAGIC = [0x4b, 0x59, 0x58, 0x42]; // "KYXB"
@@ -18,7 +20,8 @@ function log(msg, cls = '') {
 }
 
 // ---------- state ----------
-let device = null, server = null, dataChar = null, cmdChar = null;
+let ble = null;            // BLE adapter (web or native), created on first connect
+let device = null;         // { id, name }
 let parser = new H3Parser();
 let samples = 0, notifs = 0, bytes = 0, lastDataAt = 0, startedAt = 0;
 let battery = null, userStopped = false, stallTimer = null;
@@ -32,18 +35,11 @@ const hpAlpha = Math.exp(-2 * Math.PI * 0.5 / RATE);
 const hpPrevIn = new Float32Array(4), hpPrevOut = new Float32Array(4);
 // recording
 let recording = false; let rec = null; let lastRec = null; let simMode = false;
-let wakeLock = null;
-async function keepAwake(on) {
-  try {
-    if (on && !wakeLock && 'wakeLock' in navigator) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); log('螢幕常亮已開啟'); }
-    if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
-  } catch (e) { log(`螢幕常亮失敗：${e.message}`, 'warn'); }
-}
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && server?.connected) keepAwake(true); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && ble?.isConnected()) keepAwake(true).catch(() => {}); });
 
 function setStatus(text, cls) { const s = $('status'); s.textContent = text; s.className = 'status ' + cls; }
 function setButtons() {
-  const connected = !!(server && server.connected) || simMode;
+  const connected = !!(ble && ble.isConnected()) || simMode;
   $('btnConnect').disabled = connected; $('btnConnectAll').disabled = connected; $('btnDisconnect').disabled = !connected;
   $('btnRec').disabled = !connected; $('btnRec').textContent = recording ? '■ 停止並下載 EDF' : '● 開始錄製';
   $('btnRec').classList.toggle('recording', recording);
@@ -52,90 +48,83 @@ function setButtons() {
 
 // ---------- BLE ----------
 async function connect(all = false) {
-  if (!navigator.bluetooth) { log('此瀏覽器不支援 Web Bluetooth。Android 請用 Chrome；iPhone 的 Safari 不支援。', 'err'); return; }
   try {
+    if (!ble) ble = await createBle();
+    if (!ble.supported()) { log('此瀏覽器不支援 Web Bluetooth。Android 請用 Chrome 或安裝 H3 Live app；iPhone 的 Safari 不支援。', 'err'); return; }
     setStatus('選擇裝置…', 'wait');
     log(all ? '開啟裝置清單（顯示全部 BLE 裝置）…' : '開啟裝置清單（只列 xb5… / FFF0 服務）…');
-    device = await navigator.bluetooth.requestDevice(all
-      ? { acceptAllDevices: true, optionalServices: [SERVICE] }
-      : { filters: [{ services: [SERVICE] }, { namePrefix: 'xb5' }, { namePrefix: 'XB5' }, { namePrefix: 'H3' }], optionalServices: [SERVICE] });
+    device = await ble.requestDevice(all);
     log(`選到裝置：${device.name || '(無名稱)'} id=${device.id}`);
-    device.addEventListener('gattserverdisconnected', onDisconnected);
     userStopped = false;
     await openStream();
   } catch (e) {
-    if (e.name === 'NotFoundError') { log('沒有選擇裝置（已取消或清單中沒有符合的裝置）。若清單是空的，請改按「全部裝置」。', 'warn'); setStatus('未連線', 'off'); }
-    else if (e.name === 'SecurityError') { log(`被瀏覽器拒絕：${e.message}（需要 HTTPS 與使用者點擊；PWA 請用 Chrome 開啟）`, 'err'); setStatus('連線失敗', 'err'); }
-    else { log(`連線失敗：${e.name}: ${e.message}`, 'err'); setStatus('連線失敗', 'err'); }
+    const msg = String(e?.message || e);
+    if (e?.name === 'NotFoundError' || /cancel|No device/i.test(msg)) { log('沒有選擇裝置（已取消或清單中沒有符合的裝置）。若清單是空的，請改按「列出全部藍牙裝置」。', 'warn'); setStatus('未連線', 'off'); }
+    else if (e?.name === 'SecurityError') { log(`被瀏覽器拒絕：${msg}（需要 HTTPS 與使用者點擊）`, 'err'); setStatus('連線失敗', 'err'); }
+    else if (/permission|denied|not granted/i.test(msg)) { log(`沒有藍牙權限：${msg}。請到 設定 → 應用程式 → H3 Live → 權限 開啟「附近裝置」`, 'err'); setStatus('連線失敗', 'err'); }
+    else { log(`連線失敗：${e?.name || ''} ${msg}`, 'err'); setStatus('連線失敗', 'err'); }
     setButtons();
   }
 }
 
 async function openStream() {
   setStatus('連線中…', 'wait');
-  server = await device.gatt.connect();
-  log('GATT 已連線，尋找服務 FFF0…');
-  const svc = await server.getPrimaryService(SERVICE);
-  dataChar = await svc.getCharacteristic(CH_DATA);
-  cmdChar = await svc.getCharacteristic(CH_CMD);
-  await dataChar.startNotifications();
-  dataChar.addEventListener('characteristicvaluechanged', onNotify);
-  log('已訂閱 FFF5 notify，送出串流 ON (KYXB 10 80 00)');
+  await ble.connect(device.id, onDisconnected);
+  log('GATT 已連線，訂閱 FFF5 notify…');
+  await ble.startNotifications(onNotify);
+  log('送出串流 ON (KYXB 10 80 00)');
   await writeCmd(CMD_ON);
   parser.resync();
   startedAt = performance.now(); lastDataAt = startedAt;
   setStatus(`串流中：${device.name || ''}`, 'on');
-  setButtons(); keepAwake(true);
+  setButtons(); keepAwake(true).then(() => log('螢幕常亮已開啟')).catch((e) => log(`螢幕常亮失敗：${e.message}`, 'warn'));
   clearInterval(stallTimer);
   stallTimer = setInterval(watchdog, 2000);
 }
 
 async function writeCmd(buf) {
-  try { await cmdChar.writeValueWithResponse(buf); }
-  catch (e) {
-    // some stacks only allow write-without-response
-    try { await cmdChar.writeValueWithoutResponse(buf); log('writeWithResponse 失敗，改用 withoutResponse'); }
-    catch (e2) { log(`指令寫入失敗：${e2.message}`, 'err'); throw e2; }
-  }
+  try { await ble.write(buf); }
+  catch (e) { log(`指令寫入失敗：${e.message}`, 'err'); throw e; }
 }
 
 let stalledResends = 0;
 async function watchdog() {
-  if (!server || !server.connected) return;
+  if (!ble || !ble.isConnected()) return;
   const gap = (performance.now() - lastDataAt) / 1000;
   if (gap > 5) {
     if (stalledResends < 3) { stalledResends++; log(`${gap.toFixed(0)} 秒沒資料，重送串流 ON（第 ${stalledResends} 次）`, 'warn'); await writeCmd(CMD_ON).catch(() => {}); }
-    else { log('超過 15 秒沒有資料，斷線重連', 'err'); try { device.gatt.disconnect(); } catch {} }
+    else { log('超過 15 秒沒有資料，斷線重連', 'err'); try { await ble.disconnect(); } catch {} onDisconnected(); }
   } else stalledResends = 0;
 }
 
 async function disconnect() {
   userStopped = true; clearInterval(stallTimer);
   if (recording) stopRecording();
-  try { if (cmdChar) { await writeCmd(CMD_OFF); await new Promise(r => setTimeout(r, 350)); await writeCmd(CMD_OFF); log('已送串流 OFF'); } } catch {}
-  try { if (dataChar) await dataChar.stopNotifications(); } catch {}
-  try { device?.gatt.disconnect(); } catch {}
-  setStatus('未連線', 'off'); setButtons(); keepAwake(false);
+  try { if (ble?.isConnected()) { await writeCmd(CMD_OFF); await new Promise(r => setTimeout(r, 350)); await writeCmd(CMD_OFF); log('已送串流 OFF'); } } catch {}
+  try { await ble?.stopNotifications(); } catch {}
+  try { await ble?.disconnect(); } catch {}
+  setStatus('未連線', 'off'); setButtons(); keepAwake(false).catch(() => {});
 }
 
+let reconnectTimer = null;
 function onDisconnected() {
   clearInterval(stallTimer);
   setStatus('已斷線', 'err'); setButtons();
   if (userStopped) { log('已斷線'); return; }
   log('連線中斷，3 秒後自動重連…', 'warn');
-  setTimeout(async () => {
+  clearTimeout(reconnectTimer);
+  reconnectTimer = setTimeout(async () => {
     if (userStopped) return;
-    try { await openStream(); log('重連成功'); }
-    catch (e) { log(`重連失敗：${e.message}`, 'err'); setTimeout(onDisconnected, 3000); }
+    try { await openStream(); log('重連成功', 'ok'); }
+    catch (e) { log(`重連失敗：${e.message}`, 'err'); onDisconnected(); }
   }, 3000);
 }
 
 const events = [];
-function onNotify(ev) {
-  const v = ev.target.value; // DataView
-  notifs++; bytes += v.byteLength; lastDataAt = performance.now();
-  if (v.byteLength < 7) return;
-  const payload = new Uint8Array(v.buffer, v.byteOffset + 6, v.byteLength - 6);
+function onNotify(u8) {
+  notifs++; bytes += u8.byteLength; lastDataAt = performance.now();
+  if (u8.byteLength < 7) return;
+  const payload = u8.subarray(6);
   events.length = 0;
   parser.feed(payload, events);
   for (const e of events) {
@@ -248,9 +237,7 @@ function stopRecording() {
   if (secs < 30) log('報告需要至少 30 秒的錄製', 'warn'); else log('可按「產生腦健康報告」', 'ok');
   const blob = buildEdf(rec, secs);
   const name = `H3_${(device?.name || 'h3').replace(/\W+/g, '')}_${fmtDate(rec.t0)}.edf`;
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-  log(`已下載 ${name}（${secs} 秒）`, 'ok');
+  saveFile(name, blob).then((m) => log(`${m}（${secs} 秒）`, 'ok')).catch((e) => log(`存檔失敗：${e.message}`, 'err'));
 }
 const pad = (n, w = 2) => String(n).padStart(w, '0');
 const fmtDate = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
@@ -307,9 +294,9 @@ $('rpOk').onclick = () => {
 $('rpClose').onclick = () => $('reportOverlay').classList.remove('show');
 $('rpPrint').onclick = () => { const w = $('reportFrame').contentWindow; w?.focus(); w?.print(); };
 $('rpSave').onclick = () => {
-  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([lastReportHtml], { type: 'text/html' })); a.download = lastReportName; a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 10000); log(`已下載 ${lastReportName}`, 'ok');
+  saveFile(lastReportName, new Blob([lastReportHtml], { type: 'text/html' })).then((m) => log(m, 'ok')).catch((e) => log(`存檔失敗：${e.message}`, 'err'));
 };
+if (isNative) { $('rpPrint').style.display = 'none'; $('rpSave').textContent = '儲存／分享報告'; }
 
 // ---------- wiring ----------
 $('btnConnect').onclick = () => connect(false);
@@ -318,22 +305,26 @@ $('btnDisconnect').onclick = disconnect;
 $('btnRec').onclick = () => (recording ? stopRecording() : startRecording());
 $('btnClear').onclick = () => (logEl.innerHTML = '');
 setButtons(); setInterval(updateStats, 500); requestAnimationFrame(draw);
-if (/SamsungBrowser/i.test(navigator.userAgent)) {
+if (!isNative && /SamsungBrowser/i.test(navigator.userAgent)) {
   $('browserWarn').style.display = 'block';
   $('openChrome').href = `intent://${location.host}${location.pathname}${location.search}#Intent;scheme=https;package=com.android.chrome;end`;
   log('偵測到三星瀏覽器：Web Bluetooth 無法掃描，請用 Chrome 開啟', 'err');
 }
-if (!navigator.bluetooth) { setStatus('此瀏覽器不支援 Web Bluetooth', 'err'); log('需要 Android Chrome（或 Mac/Windows 的 Chrome、Edge）。iPhone Safari 不支援。', 'err'); }
+if (isNative) {
+  log('H3 Live app 就緒。開啟 H3 電源後按「連線 H3」，第一次會詢問藍牙／附近裝置權限，請允許。');
+  createBle().then((b) => { ble = b; return b.available(); }).then((ok) => log(ok ? '藍牙已開啟' : '藍牙未開啟：請先開啟手機藍牙', ok ? 'ok' : 'err')).catch((e) => log(`藍牙初始化失敗：${e.message}`, 'err'));
+} else if (!navigator.bluetooth) { setStatus('此瀏覽器不支援 Web Bluetooth', 'err'); log('需要 Android Chrome（或 Mac/Windows 的 Chrome、Edge）。iPhone Safari 不支援。', 'err'); }
 else {
   log('就緒。開啟 H3 電源後按「連線」，在清單中選 xb5… 裝置。');
   navigator.bluetooth.getAvailability?.().then(ok => log(ok ? '藍牙介面可用' : '藍牙介面不可用：請確認手機藍牙已開啟', ok ? 'ok' : 'err')).catch(() => {});
   log(`瀏覽器：${navigator.userAgent.replace(/^.*?\) /, '').slice(0, 80)}`);
 }
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+if (!isNative && 'serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
 
 // ---------- simulation (?sim): replay a captured H3 stream without hardware ----------
-if (new URLSearchParams(location.search).has('sim')) {
-  (async () => {
+let simStarted = false;
+async function startSim() {
+  if (simStarted) return; simStarted = true;
     const buf = new Uint8Array(await (await fetch('./test/h3_stream_sample.bin')).arrayBuffer());
     log('模擬模式：重播實機側錄樣本（無硬體）', 'warn');
     setStatus('模擬串流', 'wait'); startedAt = performance.now(); lastDataAt = startedAt;
@@ -345,8 +336,9 @@ if (new URLSearchParams(location.search).has('sim')) {
         const chunk = buf.subarray(pos, pos + 14); pos += 14;
         if (pos >= buf.length) { pos = 0; parser.resync(); }
         const pkt = new Uint8Array(6 + chunk.length); pkt[2] = seq++ & 0xff; pkt.set(chunk, 6);
-        onNotify({ target: { value: new DataView(pkt.buffer) } });
+        onNotify(pkt);
       }
     }, 14);
-  })();
 }
+if (new URLSearchParams(location.search).has('sim')) startSim();
+{ let taps = 0, lastTap = 0; document.querySelector('header h1').addEventListener('click', () => { const t = Date.now(); taps = t - lastTap < 600 ? taps + 1 : 1; lastTap = t; if (taps >= 5 && !ble?.isConnected()) startSim(); }); }

@@ -10,3 +10,12 @@
 - 本機開發：`python3 -m http.server 8787` 後開 http://127.0.0.1:8787/（localhost 可用 Web Bluetooth，其餘網域需 HTTPS）。
 
 協定摘要與 Rust 原版：見 sleepwellH3-rec/app/README-H3rec.md、2chrec/src-tauri/src/parser.rs。
+
+## Android APK（Capacitor 8）
+
+WebView 沒有 Web Bluetooth，app 版藍牙改走 `@capacitor-community/bluetooth-le`（`ble.js` 依 `isNative` 切換，網頁版仍用 Web Bluetooth）；存檔走 `@capacitor/filesystem`（Documents/H3Live/）＋分享面板，螢幕常亮走 keep-awake 外掛（`platform.js`）。
+
+- 建置：`./build-apk.sh`（需 JDK 21 + Android SDK；內部先跑 `build-www.sh` 用 esbuild 把 app.js 連外掛打包進 `www/`，再 `cap sync` + `gradlew assembleDebug`），產物複製到 `~/Downloads/H3Live.apk`。
+- appId `com.sleepware.h3live`；權限在 `android/app/src/main/AndroidManifest.xml`（BLUETOOTH_SCAN neverForLocation、BLUETOOTH_CONNECT）。
+- app 內沒有網址列，連點標題「H3 Live」5 下進入模擬模式。
+- 真機安裝：`adb install -r ~/Downloads/H3Live.apk`，或把 APK 傳到手機點開（需允許安裝未知來源）。

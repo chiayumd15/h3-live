@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">H3 Live</string>
+    <string name="title_activity_main">H3 Live</string>
+    <string name="package_name">com.sleepware.h3live</string>
+    <string name="custom_url_scheme">com.sleepware.h3live</string>
+</resources>
