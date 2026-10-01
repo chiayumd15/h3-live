@@ -22,6 +22,8 @@ let parser = new H3Parser();
 let samples = 0, notifs = 0, bytes = 0, lastDataAt = 0, startedAt = 0;
 let battery = null, userStopped = false, stallTimer = null;
 const rings = CH_NAMES.map(() => new Float32Array(RATE * WIN_SEC));
+const ACC_NAMES = ['X', 'Y', 'Z'], ACC_LSB_PER_G = 8192;
+const accRings = ACC_NAMES.map(() => new Float32Array(RATE * WIN_SEC));
 let head = 0; // write index into rings
 let filled = 0;
 // simple 1st-order high-pass (0.5 Hz) to remove DC so waveforms stay in view
@@ -148,6 +150,7 @@ function onNotify(ev) {
         rings[c][head] = y;
         if (recording) rec.ch[c].push(raw);
       }
+      for (let c = 0; c < 3; c++) { const ac = e.channels[4 + c]; accRings[c][head] = ac && ac.length ? ac[Math.min(ac.length - 1, Math.floor(i / 5))] / ACC_LSB_PER_G : 0; }
       head = (head + 1) % rings[0].length; filled = Math.min(filled + 1, rings[0].length); samples++;
     }
     if (recording) { const a = e.channels; for (let k = 0; k < (a[4]?.length || 0); k++) { rec.acc[0].push(a[4][k]); rec.acc[1].push(a[5][k]); rec.acc[2].push(a[6][k]); } }
@@ -180,6 +183,11 @@ try { showCh = localStorage.getItem('h3live.showCh') === '2' ? 2 : 4; } catch {}
 function setShowCh(n) { showCh = n; $('btnCh').textContent = n + 'ch'; try { localStorage.setItem('h3live.showCh', String(n)); } catch {} }
 $('btnCh').onclick = () => setShowCh(showCh === 4 ? 2 : 4);
 setShowCh(showCh);
+let showAcc = true;
+try { showAcc = localStorage.getItem('h3live.showAcc') !== '0'; } catch {}
+function setShowAcc(v) { showAcc = v; $('btnAcc').classList.toggle('off', !v); try { localStorage.setItem('h3live.showAcc', v ? '1' : '0'); } catch {} }
+$('btnAcc').onclick = () => setShowAcc(!showAcc);
+setShowAcc(showAcc);
 function draw() {
   const dpr = devicePixelRatio || 1;
   const W = canvas.clientWidth, H = canvas.clientHeight;
@@ -187,8 +195,28 @@ function draw() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const dark = matchMedia('(prefers-color-scheme: dark)').matches;
   ctx.fillStyle = dark ? '#0f1419' : '#fff'; ctx.fillRect(0, 0, W, H);
-  const lanes = showCh, laneH = H / lanes, len = rings[0].length;
+  const lanes = showCh, len = rings[0].length;
+  const accH = showAcc ? Math.max(22, H * 0.07) : 0; // each X/Y/Z lane
+  const laneH = (H - accH * 3) / lanes;
   ctx.font = '12px system-ui'; ctx.textBaseline = 'top';
+  if (showAcc) {
+    const ACC_RANGE = 2; // ±2 g
+    for (let c = 0; c < 3; c++) {
+      const y0 = lanes * laneH + c * accH, mid = y0 + accH / 2, k = accH / 2 / ACC_RANGE;
+      ctx.fillStyle = dark ? '#121920' : '#f8fafc'; ctx.fillRect(0, y0, W, accH);
+      ctx.strokeStyle = dark ? '#2a3440' : '#e5e7eb'; ctx.beginPath(); ctx.moveTo(0, y0); ctx.lineTo(W, y0); ctx.stroke();
+      ctx.fillStyle = dark ? '#9aa4b2' : '#6b7280'; ctx.font = '10px system-ui'; ctx.fillText(`${ACC_NAMES[c]} ±2 g`, 6, y0 + 2);
+      ctx.save(); ctx.beginPath(); ctx.rect(0, y0, W, accH); ctx.clip();
+      ctx.strokeStyle = ['#f59e0b', '#0891b2', '#64748b'][c]; ctx.lineWidth = 1; ctx.beginPath();
+      for (let x = 0; x < W; x++) {
+        const idx = Math.floor(x / W * len), i = (head + idx) % len;
+        if (idx >= len - filled) { const y = mid - accRings[c][i] * k; x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
+        else if (filled && idx === len - filled) ctx.moveTo(x, mid);
+      }
+      ctx.stroke(); ctx.restore();
+    }
+    ctx.font = '12px system-ui';
+  }
   for (let c = 0; c < lanes; c++) {
     const y0 = c * laneH;
     ctx.strokeStyle = dark ? '#2a3440' : '#e5e7eb'; ctx.beginPath(); ctx.moveTo(0, y0 + laneH); ctx.lineTo(W, y0 + laneH); ctx.stroke();

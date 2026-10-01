@@ -19,6 +19,7 @@ h1{font-size:18px;margin:0 0 8px;display:flex;align-items:center;gap:10px}
 .row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
 button{font:inherit;padding:10px 14px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--fg);cursor:pointer}
 button:disabled{opacity:.45;cursor:default}
+#btnAcc.off{opacity:.45;text-decoration:line-through}
 #btnConnect{background:var(--accent);color:#fff;border-color:transparent}#btnRec{color:#dc2626;font-weight:600}
 select{font:inherit;padding:8px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--fg)}
 #chart{width:100%;height:46vh;min-height:260px;border:1px solid var(--line);border-radius:12px;background:var(--card);display:block;touch-action:none}
@@ -49,6 +50,7 @@ small{color:var(--muted)}
   <button id="btnDisconnect" disabled>斷線</button>
   <button id="btnRec" disabled>● 開始錄製</button>
   <button id="btnCh" title="切換顯示 2 或 4 通道">4ch</button>
+  <button id="btnAcc" title="顯示/隱藏 X/Y/Z 加速度">XYZ</button>
   <select id="scale" title="每軌振幅">
     <option value="50">±50 µV</option><option value="100">±100 µV</option><option value="200" selected>±200 µV</option><option value="500">±500 µV</option><option value="2000">±2000 µV</option>
   </select>
