@@ -1,4 +1,4 @@
-const C='h3live-v1';const A=['./','./index.html','./app.js','./h3parser.js','./manifest.webmanifest','./icon.svg'];
+const C='h3live-v2';const A=['./','./index.html','./app.js','./h3parser.js','./report/h3core.js','./report/reportHtml.js','./manifest.webmanifest','./icon.svg'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(C).then(c=>c.addAll(A)).then(()=>self.skipWaiting()))});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==C).map(x=>caches.delete(x)))).then(()=>self.clients.claim()))});
 // network first, cache fallback (so updates arrive when online, still works offline)

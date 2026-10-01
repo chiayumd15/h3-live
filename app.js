@@ -1,4 +1,5 @@
 import { H3Parser } from './h3parser.js';
+import { buildReport } from './report/reportHtml.js';
 
 const SERVICE = 0xfff0, CH_DATA = 0xfff5, CH_CMD = 0xfff6;
 const MAGIC = [0x4b, 0x59, 0x58, 0x42]; // "KYXB"
@@ -30,7 +31,7 @@ let filled = 0;
 const hpAlpha = Math.exp(-2 * Math.PI * 0.5 / RATE);
 const hpPrevIn = new Float32Array(4), hpPrevOut = new Float32Array(4);
 // recording
-let recording = false; let rec = null; let simMode = false;
+let recording = false; let rec = null; let lastRec = null; let simMode = false;
 let wakeLock = null;
 async function keepAwake(on) {
   try {
@@ -45,6 +46,8 @@ function setButtons() {
   const connected = !!(server && server.connected) || simMode;
   $('btnConnect').disabled = connected; $('btnConnectAll').disabled = connected; $('btnDisconnect').disabled = !connected;
   $('btnRec').disabled = !connected; $('btnRec').textContent = recording ? '■ 停止並下載 EDF' : '● 開始錄製';
+  $('btnRec').classList.toggle('recording', recording);
+  $('btnReport').disabled = recording || !lastRec || lastRec.ch[0].length < 30 * RATE;
 }
 
 // ---------- BLE ----------
@@ -241,6 +244,8 @@ function stopRecording() {
   recording = false; setButtons();
   const secs = Math.floor(rec.ch[0].length / RATE);
   if (secs < 1) { log('錄製不足 1 秒，不存檔', 'warn'); return; }
+  lastRec = rec; setButtons();
+  if (secs < 30) log('報告需要至少 30 秒的錄製', 'warn'); else log('可按「產生腦健康報告」', 'ok');
   const blob = buildEdf(rec, secs);
   const name = `H3_${(device?.name || 'h3').replace(/\W+/g, '')}_${fmtDate(rec.t0)}.edf`;
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
@@ -275,6 +280,36 @@ function buildEdf(r, secs) {
   }
   return new Blob([buf], { type: 'application/octet-stream' });
 }
+
+// ---------- brain-health report (same engine as 2chREC / H3腦健康報告) ----------
+let lastReportHtml = '', lastReportName = '';
+$('btnReport').onclick = () => { try { $('rpName').value = localStorage.getItem('h3live.rpName') || ''; } catch {} $('reportDlg').showModal(); };
+$('rpCancel').onclick = () => $('reportDlg').close();
+$('rpOk').onclick = () => {
+  $('reportDlg').close();
+  if (!lastRec) return;
+  try {
+    const n = lastRec.ch[0].length;
+    const toUv = (arr) => { const f = new Float32Array(n); for (let i = 0; i < n; i++) f[i] = arr[i] * UV_PER_LSB; return f; };
+    const name = $('rpName').value.trim();
+    try { localStorage.setItem('h3live.rpName', name); } catch {}
+    const r = buildReport({ name, age: $('rpAge').value.trim(), sex: $('rpSex').value, start: lastRec.t0, sampleRate: RATE,
+      fp1: toUv(lastRec.ch[0]), fp2: toUv(lastRec.ch[1]), physMin: -25207.6, physMax: 25208.3, source: `H3 Live ${device?.name || ''}` });
+    lastReportHtml = r.html; lastReportName = `腦健康報告_${r.name}_${r.no}.html`;
+    const fw = Math.max(200, innerWidth - 20); // A4 page is 210mm ≈ 794px + 16px margins
+    const zoom = Math.min(1, fw / 826);
+    $('reportFrame').srcdoc = r.html.replace('#toolbar { display: flex; }', '#toolbar { display: none; }')
+      .replace('</head>', `<style>@media screen { .page { zoom: ${zoom.toFixed(3)}; margin: 8px auto; } body { margin: 0; } }</style></head>`);
+    $('reportOverlay').classList.add('show');
+    log(`報告完成：${r.no} 總分 ${r.res.scores.overall}`, 'ok');
+  } catch (e) { log(`產生報告失敗：${e.message}`, 'err'); console.error(e); }
+};
+$('rpClose').onclick = () => $('reportOverlay').classList.remove('show');
+$('rpPrint').onclick = () => { const w = $('reportFrame').contentWindow; w?.focus(); w?.print(); };
+$('rpSave').onclick = () => {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([lastReportHtml], { type: 'text/html' })); a.download = lastReportName; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000); log(`已下載 ${lastReportName}`, 'ok');
+};
 
 // ---------- wiring ----------
 $('btnConnect').onclick = () => connect(false);

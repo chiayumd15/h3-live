@@ -4,73 +4,129 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>H3 Live</title>
-<meta name="description" content="用手機藍牙直接連 H3 腦波儀，即時看波形、錄製 EDF">
+<meta name="description" content="用手機藍牙直接連 H3 腦波儀，即時看波形、錄製 EDF、產生腦健康報告">
 <link rel="manifest" href="./manifest.webmanifest">
 <meta name="theme-color" content="#0f1419">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="./icon.svg">
 <style>
-:root{--bg:#f6f7f9;--fg:#111827;--muted:#6b7280;--card:#fff;--line:#e5e7eb;--accent:#2563eb}
-@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0b0f14;--fg:#e5e7eb;--muted:#9aa4b2;--card:#141a21;--line:#2a3440;--accent:#60a5fa}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Noto Sans TC",sans-serif;padding:12px 16px calc(16px + env(safe-area-inset-bottom))}
-h1{font-size:18px;margin:0 0 8px;display:flex;align-items:center;gap:10px}
-.status{font-size:13px;padding:2px 10px;border-radius:999px;background:var(--line)}
+:root{--bg:#f6f7f9;--fg:#111827;--muted:#6b7280;--card:#fff;--line:#e5e7eb;--accent:#2563eb;--rec:#dc2626}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0b0f14;--fg:#e5e7eb;--muted:#9aa4b2;--card:#141a21;--line:#2a3440;--accent:#3b82f6}}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,"Noto Sans TC",sans-serif;
+  padding:10px 14px calc(12px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px;min-height:100vh}
+header{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+h1{font-size:18px;margin:0}
+.status{font-size:12px;padding:3px 10px;border-radius:999px;background:var(--line);white-space:nowrap}
 .status.on{background:#16a34a;color:#fff}.status.err{background:#dc2626;color:#fff}.status.wait{background:#f59e0b;color:#111}
-.row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
-button{font:inherit;padding:10px 14px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--fg);cursor:pointer}
-button:disabled{opacity:.45;cursor:default}
-#btnConnect{background:var(--accent);color:#fff;border-color:transparent}#btnRec{color:#dc2626;font-weight:600}
-select{font:inherit;padding:8px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--fg)}
-#chart{width:100%;height:46vh;min-height:260px;border:1px solid var(--line);border-radius:12px;background:var(--card);display:block;touch-action:none}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px 12px;font-size:13px;margin:10px 0}
+#browserWarn{display:none;background:#dc2626;color:#fff;padding:10px 14px;border-radius:10px;font-size:14px}
+#browserWarn a{display:inline-block;margin-top:8px;background:#fff;color:#dc2626;font-weight:700;padding:8px 14px;border-radius:8px;text-decoration:none}
+
+#chart{width:100%;height:48vh;min-height:240px;border:1px solid var(--line);border-radius:12px;background:var(--card);display:block;touch-action:none}
+
+.side{display:flex;flex-direction:column;gap:10px}
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.controls .wide{grid-column:1/-1}
+button,select{font:inherit;font-size:15px;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--fg);cursor:pointer;min-height:44px}
+button:disabled{opacity:.4;cursor:default}
+#btnConnect{background:var(--accent);color:#fff;border-color:transparent;font-weight:600}
+#btnRec{color:var(--rec);font-weight:700;border-color:var(--rec)}
+#btnRec.recording{background:var(--rec);color:#fff}
+#btnReport{font-weight:600}
+.sub{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.sub button{min-height:0;padding:4px 10px;font-size:12px}
+
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:13px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
 .stats div span{color:var(--muted);display:block;font-size:11px}
-#log{font:12px/1.5 ui-monospace,Menlo,monospace;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 10px;height:180px;overflow:auto;white-space:pre-wrap;word-break:break-all}
+.stats .wide{grid-column:1/-1}
+
+#log{font:12px/1.5 ui-monospace,Menlo,monospace;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 10px;height:150px;overflow:auto;white-space:pre-wrap;word-break:break-all}
 #log .err{color:#dc2626}#log .warn{color:#d97706}#log .ok{color:#16a34a}
-small{color:var(--muted)}
-.wrap{display:contents}
+.note{font-size:12px;color:var(--muted);margin:0}
+
+/* 橫向：左波形、右控制 */
 @media (orientation:landscape) and (max-height:600px){
-  body{padding:8px 12px;height:100vh;overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr) 300px;grid-template-rows:auto minmax(0,1fr);gap:6px 12px}
-  h1{grid-column:1/-1;margin:0;font-size:16px}
+  body{display:grid;grid-template-columns:minmax(0,1fr) 320px;grid-template-rows:auto minmax(0,1fr);gap:6px 12px;height:100vh;overflow:hidden;padding:8px 12px}
+  header,#browserWarn{grid-column:1/-1}
+  h1{font-size:16px}
   #chart{grid-column:1;grid-row:2;height:100%;min-height:0}
-  .side{grid-column:2;grid-row:2;display:flex;flex-direction:column;min-height:0;gap:6px;overflow:auto}
-  .side .row{margin:0}.side button{padding:8px 10px;font-size:13px}
-  .stats{grid-template-columns:1fr 1fr;gap:4px 8px;font-size:12px;margin:0}
+  .side{grid-column:2;grid-row:2;gap:6px;min-height:0;overflow:auto}
+  button,select{min-height:38px;padding:7px 10px;font-size:14px}
+  .stats{font-size:12px;padding:8px 10px;gap:4px 8px}
   #log{height:auto;flex:1;min-height:60px;font-size:11px}
   .note{display:none}
 }
+
+/* 報告資料對話框 */
+dialog{border:none;border-radius:14px;padding:18px;background:var(--card);color:var(--fg);width:min(92vw,380px)}
+dialog::backdrop{background:rgba(0,0,0,.5)}
+dialog h2{margin:0 0 10px;font-size:16px}
+dialog label{display:block;font-size:13px;color:var(--muted);margin-top:8px}
+dialog input,dialog select{width:100%;font:inherit;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);margin-top:4px;min-height:0}
+dialog .row{display:flex;gap:8px;margin-top:14px}
+dialog .row button{flex:1}
+
+/* 報告預覽覆蓋層 */
+#reportOverlay{position:fixed;inset:0;background:rgba(2,6,23,.9);z-index:9999;display:none;flex-direction:column;padding:10px;gap:8px}
+#reportOverlay.show{display:flex}
+#reportOverlay .bar{display:flex;gap:8px;flex-shrink:0}
+#reportOverlay .bar button{flex:1;background:#2457a8;color:#fff;border:none;font-weight:600}
+#reportOverlay .bar button.ghost{background:#475569}
+#reportFrame{flex:1;width:100%;border:none;border-radius:10px;background:#f2f6fb}
 </style>
 </head>
 <body>
-<div id="browserWarn" style="display:none;grid-column:1/-1;background:#dc2626;color:#fff;padding:10px 14px;border-radius:10px;margin-bottom:8px;font-size:14px;line-height:1.5">
-  目前是<b>三星瀏覽器</b>，它的藍牙清單永遠是空的。請改用 Chrome 開啟這個網頁，並在 Chrome 裡「加到主畫面」。
-  <div style="margin-top:8px"><a id="openChrome" href="#" style="display:inline-block;background:#fff;color:#dc2626;font-weight:700;padding:8px 14px;border-radius:8px;text-decoration:none">用 Chrome 開啟</a></div>
-</div>
-<h1>H3 Live <span id="status" class="status off">未連線</span></h1>
+<div id="browserWarn">目前是<b>三星瀏覽器</b>，它的藍牙清單永遠是空的。請改用 Chrome 開啟，並在 Chrome 裡「加到主畫面」。<br><a id="openChrome" href="#">用 Chrome 開啟</a></div>
+<header><h1>H3 Live</h1><span id="status" class="status off">未連線</span></header>
+
 <canvas id="chart"></canvas>
+
 <div class="side">
-<div class="row">
-  <button id="btnConnect">連線 H3</button>
-  <button id="btnConnectAll" title="不過濾，列出附近所有藍牙裝置">全部裝置</button>
-  <button id="btnDisconnect" disabled>斷線</button>
-  <button id="btnRec" disabled>● 開始錄製</button>
-  <button id="btnCh" title="切換顯示 2 或 4 通道">4ch</button>
-  <select id="scale" title="每軌振幅">
-    <option value="50">±50 µV</option><option value="100">±100 µV</option><option value="200" selected>±200 µV</option><option value="500">±500 µV</option><option value="2000">±2000 µV</option>
-  </select>
+  <div class="controls">
+    <button id="btnConnect">連線 H3</button>
+    <button id="btnDisconnect" disabled>斷線</button>
+    <button id="btnRec" class="wide" disabled>● 開始錄製</button>
+    <button id="btnCh" title="切換顯示 2 或 4 通道">4ch</button>
+    <select id="scale" title="每軌振幅">
+      <option value="50">±50 µV</option><option value="100">±100 µV</option><option value="200" selected>±200 µV</option><option value="500">±500 µV</option><option value="2000">±2000 µV</option>
+    </select>
+    <button id="btnReport" class="wide" disabled>產生腦健康報告</button>
+  </div>
+  <div class="sub"><span>找不到裝置時：</span><button id="btnConnectAll">列出全部藍牙裝置</button></div>
+
+  <div class="stats">
+    <div><span>樣本數</span><b id="stSamples">0</b></div>
+    <div><span>實際取樣率</span><b id="stRate">—</b></div>
+    <div><span>區塊 / 丟失 / 校驗錯 / 框錯</span><b id="stBlocks">—</b></div>
+    <div><span>電池</span><b id="stBat">—</b></div>
+    <div><span>錄製</span><b id="stRec">—</b></div>
+    <div><span>通知 / 位元組</span><b id="stNotif">0</b></div>
+    <div class="wide"><span>最近 1 秒峰對峰 (µV)</span><b id="stPP">—</b></div>
+  </div>
+
+  <div class="sub"><span>紀錄</span><button id="btnClear">清除</button></div>
+  <div id="log"></div>
+  <p class="note">顯示用 0.5 Hz 高通去直流；錄製存原始值。EDF 與 H3 記憶卡／Sleepwell H3rec 相同格式。報告需錄 ≥30 秒，建議清醒閉眼靜坐 3 分鐘。</p>
 </div>
-<div class="stats">
-  <div><span>樣本數</span><b id="stSamples">0</b></div>
-  <div><span>實際取樣率</span><b id="stRate">—</b></div>
-  <div><span>通知 / 位元組</span><b id="stNotif">0</b></div>
-  <div><span>區塊 / 丟失 / 校驗錯 / 框錯</span><b id="stBlocks">—</b></div>
-  <div><span>電池</span><b id="stBat">—</b></div>
-  <div><span>錄製</span><b id="stRec">—</b></div>
-  <div style="grid-column:1/-1"><span>最近 1 秒峰對峰 (µV)</span><b id="stPP">—</b></div>
+
+<dialog id="reportDlg">
+  <h2>腦健康報告</h2>
+  <label>姓名<input id="rpName" placeholder="未命名" autocomplete="off"></label>
+  <label>年齡<input id="rpAge" inputmode="numeric" placeholder="選填"></label>
+  <label>性別<select id="rpSex"><option value="">不填</option><option>男</option><option>女</option></select></label>
+  <div class="row"><button id="rpCancel" type="button">取消</button><button id="rpOk" type="button" style="background:#2457a8;color:#fff;border:none;font-weight:600">產生</button></div>
+</dialog>
+
+<div id="reportOverlay">
+  <div class="bar">
+    <button id="rpPrint">列印／存 PDF</button>
+    <button id="rpSave">下載 HTML</button>
+    <button id="rpClose" class="ghost">關閉</button>
+  </div>
+  <iframe id="reportFrame" title="報告"></iframe>
 </div>
-<div class="row" style="justify-content:space-between;align-items:center"><small>紀錄</small><button id="btnClear" style="padding:4px 10px;font-size:12px">清除</button></div>
-<div id="log"></div>
-<p class="note"><small>顯示用 0.5 Hz 高通去直流；錄製存原始值。EDF 格式與 H3 記憶卡/Sleepwell H3rec 相同（EEG1–4 250 Hz、X/Y/Z 50 Hz）。</small></p>
-</div>
+
 <script type="module" src="./app.js"></script>
 </body>
 </html>
