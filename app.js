@@ -210,10 +210,20 @@ function liveStatus(s) {
   return ['建議評估', '#c0392b'];
 }
 function setTile(id, score, note) {
-  const t = $(id), b = t.querySelector('b'), u = t.querySelector('u'), e = t.querySelector('em');
-  if (score == null) { b.textContent = '—'; u.style.width = '0'; u.style.background = 'var(--muted)'; e.textContent = note; e.style.background = ''; e.style.color = ''; return; }
+  const t = $(id), b = t.querySelector('b'), bar = t.querySelector('.bar-fill'), e = t.querySelector('em');
+  if (score == null) {
+    t.classList.remove('active');
+    b.textContent = '—'; b.style.cssText = '';
+    bar.style.width = '0'; bar.style.background = '';
+    e.textContent = note; e.style.background = ''; e.style.color = ''; e.style.borderColor = '';
+    return;
+  }
   const [txt, col] = liveStatus(score);
-  b.textContent = score; u.style.width = score + '%'; u.style.background = col; e.textContent = note || txt; e.style.background = col; e.style.color = '#fff';
+  t.classList.add('active');
+  b.textContent = score; b.style.cssText = `-webkit-text-fill-color:${col};color:${col}`;
+  bar.style.width = score + '%'; bar.style.background = `linear-gradient(90deg,${col},${col}88)`;
+  bar.style.boxShadow = `0 0 8px ${col}40`;
+  e.textContent = note || txt; e.style.background = col + '18'; e.style.color = col; e.style.borderColor = col + '40';
 }
 let liveBusy = false, lastLiveAt = 0;
 function updateLive() {
@@ -252,8 +262,8 @@ function draw() {
   const W = canvas.clientWidth, H = canvas.clientHeight;
   if (canvas.width !== W * dpr || canvas.height !== H * dpr) { canvas.width = W * dpr; canvas.height = H * dpr; }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const dark = matchMedia('(prefers-color-scheme: dark)').matches;
-  ctx.fillStyle = dark ? '#0f1419' : '#fff'; ctx.fillRect(0, 0, W, H);
+  const dark = !matchMedia('(prefers-color-scheme: light)').matches;
+  ctx.fillStyle = dark ? '#0d1117' : '#fff'; ctx.fillRect(0, 0, W, H);
   const lanes = showCh, len = rings[0].length;
   const accH = showAcc ? Math.max(36, H * 0.11) : 0; // each X/Y/Z lane (3 lanes ≈ 1/3 of chart)
   const laneH = (H - accH * 3) / lanes;
@@ -262,9 +272,9 @@ function draw() {
     const ACC_RANGE = 2; // ±2 g
     for (let c = 0; c < 3; c++) {
       const y0 = lanes * laneH + c * accH, mid = y0 + accH / 2, k = accH / 2 / ACC_RANGE;
-      ctx.fillStyle = dark ? '#121920' : '#f8fafc'; ctx.fillRect(0, y0, W, accH);
-      ctx.strokeStyle = dark ? '#2a3440' : '#e5e7eb'; ctx.beginPath(); ctx.moveTo(0, y0); ctx.lineTo(W, y0); ctx.stroke();
-      ctx.fillStyle = dark ? '#9aa4b2' : '#6b7280'; ctx.font = '12px system-ui'; ctx.fillText(`${ACC_NAMES[c]} ±2 g`, 6, y0 + 2);
+      ctx.fillStyle = dark ? '#0a0f16' : '#f8fafc'; ctx.fillRect(0, y0, W, accH);
+      ctx.strokeStyle = dark ? '#1a2332' : '#e5e7eb'; ctx.beginPath(); ctx.moveTo(0, y0); ctx.lineTo(W, y0); ctx.stroke();
+      ctx.fillStyle = dark ? '#6e7a92' : '#6b7280'; ctx.font = '12px system-ui'; ctx.fillText(`${ACC_NAMES[c]} ±2 g`, 6, y0 + 2);
       ctx.save(); ctx.beginPath(); ctx.rect(0, y0, W, accH); ctx.clip();
       ctx.strokeStyle = ['#f59e0b', '#0891b2', '#64748b'][c]; ctx.lineWidth = 1; ctx.beginPath();
       for (let x = 0; x < W; x++) {
@@ -278,10 +288,10 @@ function draw() {
   }
   for (let c = 0; c < lanes; c++) {
     const y0 = c * laneH;
-    ctx.strokeStyle = dark ? '#2a3440' : '#e5e7eb'; ctx.beginPath(); ctx.moveTo(0, y0 + laneH); ctx.lineTo(W, y0 + laneH); ctx.stroke();
-    ctx.fillStyle = dark ? '#9aa4b2' : '#6b7280'; ctx.fillText(`${CH_NAMES[c]}  ±${scaleUv} µV`, 6, y0 + 4);
+    ctx.strokeStyle = dark ? '#1a2332' : '#e5e7eb'; ctx.beginPath(); ctx.moveTo(0, y0 + laneH); ctx.lineTo(W, y0 + laneH); ctx.stroke();
+    ctx.fillStyle = dark ? '#6e7a92' : '#6b7280'; ctx.fillText(`${CH_NAMES[c]}  ±${scaleUv} µV`, 6, y0 + 4);
     ctx.save(); ctx.beginPath(); ctx.rect(0, y0, W, laneH); ctx.clip();
-    ctx.strokeStyle = ['#2563eb', '#16a34a', '#dc2626', '#9333ea'][c]; ctx.lineWidth = 1.2; ctx.beginPath();
+    ctx.strokeStyle = ['#00bcd4', '#00e676', '#ff5252', '#b388ff'][c]; ctx.lineWidth = 1.4; ctx.beginPath();
     const mid = y0 + laneH / 2, k = laneH / 2 / scaleUv;
     for (let x = 0; x < W; x++) {
       const idx = Math.floor(x / W * len); // left = oldest
