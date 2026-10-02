@@ -139,6 +139,7 @@ function onNotify(u8) {
       continue;
     }
     if (samples === 0) log(`收到第一個波形區塊 counter=${e.counter} N=${e.n} div=[${e.div}]`, 'ok');
+    if (e.lostBefore) { const d = globalThis.__h3dbg || (globalThis.__h3dbg = { gaps: {}, n: 0 }); d.gaps[e.lostBefore] = (d.gaps[e.lostBefore] || 0) + 1; d.n++; } // counter-gap histogram for firmware diagnosis
     for (let i = 0; i < e.n; i++) {
       for (let c = 0; c < 4; c++) {
         const raw = e.channels[c] ? e.channels[c][i] : 0;
