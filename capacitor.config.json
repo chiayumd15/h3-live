@@ -2,6 +2,13 @@
   "appId": "com.sleepware.h3live",
   "appName": "H3 Live",
   "webDir": "www",
-  "android": { "allowMixedContent": false },
-  "plugins": { "SplashScreen": { "launchShowDuration": 0 } }
+  "android": {
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 0
+    }
+  },
+  "loggingBehavior": "production"
 }

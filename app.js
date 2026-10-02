@@ -151,11 +151,14 @@ function onNotify(u8) {
 }
 
 // ---------- stats ----------
+const rateHist = []; // [t, samples] pairs for a 5-second sliding-window rate
 function updateStats() {
   const s = parser.stats;
-  const secs = startedAt ? (performance.now() - startedAt) / 1000 : 0;
+  const now = performance.now();
+  rateHist.push([now, samples]); while (rateHist.length > 2 && now - rateHist[0][0] > 5000) rateHist.shift();
+  const dt = (now - rateHist[0][0]) / 1000, dn = samples - rateHist[0][1];
   $('stSamples').textContent = samples.toLocaleString();
-  $('stRate').textContent = secs > 1 ? (samples / secs).toFixed(1) + ' Hz' : '—';
+  $('stRate').textContent = dt > 2 && dn > 0 ? (dn / dt).toFixed(1) + ' Hz' : '—';
   $('stNotif').textContent = `${notifs.toLocaleString()} / ${(bytes / 1024).toFixed(0)} KB`;
   $('stBlocks').textContent = `${s.blocks} 丟 ${s.lostBlocks} 錯 ${s.checksumErrors} 框 ${s.framingErrors}`;
   $('stBat').textContent = battery != null ? battery.toFixed(2) + ' V' : '—';

@@ -295,7 +295,7 @@ function renderReport(c) {
 <div class="page">
 <div class="deco"></div><div class="deco2"></div>
 <header class="rep"><svg class="logo" viewBox="0 0 64 64" style="color:#2457a8"><use href="#ico-brain"/></svg>
-  <div><h1>H3 \u8166\u5065\u5EB7\u5831\u544A</h1><div class="sub">H3 Live \u624B\u6A5F\u5373\u6642\u8A18\u9304\u30FB\u5FEB\u901F\u7BE9\u6AA2\u30FB\u6301\u7E8C\u8FFD\u8E64</div></div></header>
+  <div><h1>H3 \u8166\u5065\u5EB7\u5831\u544A</h1><div class="sub">H3 Live \u5373\u6642\u8A18\u9304\u30FB\u5FEB\u901F\u7BE9\u6AA2\u30FB\u6301\u7E8C\u8FFD\u8E64</div></div></header>
 <div class="info">
   <span>${icon("ico-user")}\u53D7\u6AA2\u8005\uFF1A<b>${esc(c.name)}</b></span><i class="sep"></i>
   <span>${icon("ico-cal")}\u6AA2\u6E2C\u65E5\u671F\uFF1A<b>${fmtDate(start)}</b></span><i class="sep"></i>
