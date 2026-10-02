@@ -128,7 +128,7 @@ export class H3Parser {
     let lostBefore = 0;
     if (this.lastCounter !== null) {
       const gap = (this.curCounter - this.lastCounter - 1) & 0xffff;
-      lostBefore = gap > 5000 ? 0 : gap;
+      lostBefore = gap > 300 ? 0 : gap; // >300 blocks (~36 s) is a (re)connect discontinuity, not loss
     }
     this.lastCounter = this.curCounter;
     this.stats.blocks++; this.stats.lostBlocks += lostBefore;
