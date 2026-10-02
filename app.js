@@ -53,7 +53,8 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-function setStatus(text, cls) { const s = $('status'); s.textContent = text; s.className = 'status ' + cls; }
+const STATUS_TEXT = { off: 'STANDBY', on: 'STREAMING', err: 'ERROR', wait: 'CONNECTING' };
+function setStatus(text, cls) { const s = $('status'); s.textContent = text || STATUS_TEXT[cls] || text; s.className = 'status ' + cls; }
 function setButtons() {
   const connected = !!(ble && ble.isConnected()) || simMode;
   $('btnConnect').disabled = connected; $('btnConnectAll').disabled = connected; $('btnDisconnect').disabled = !connected;
@@ -67,7 +68,7 @@ async function connect(all = false) {
   try {
     if (!ble) ble = await createBle();
     if (!ble.supported()) { log('此瀏覽器不支援 Web Bluetooth。Android 請用 Chrome 或安裝 H3 Live app；iPhone 的 Safari 不支援。', 'err'); return; }
-    setStatus('選擇裝置…', 'wait');
+    setStatus('SCANNING', 'wait');
     log(all ? '開啟裝置清單（顯示全部 BLE 裝置）…' : '開啟裝置清單（只列 xb5… / FFF0 服務）…');
     device = await ble.requestDevice(all);
     log(`選到裝置：${device.name || '(無名稱)'} id=${device.id}`);
@@ -75,16 +76,16 @@ async function connect(all = false) {
     await openStream();
   } catch (e) {
     const msg = String(e?.message || e);
-    if (e?.name === 'NotFoundError' || /cancel|No device/i.test(msg)) { log('沒有選擇裝置（已取消或清單中沒有符合的裝置）。若清單是空的，請改按「列出全部藍牙裝置」。', 'warn'); setStatus('未連線', 'off'); }
-    else if (e?.name === 'SecurityError') { log(`被瀏覽器拒絕：${msg}（需要 HTTPS 與使用者點擊）`, 'err'); setStatus('連線失敗', 'err'); }
-    else if (/permission|denied|not granted/i.test(msg)) { log(`沒有藍牙權限：${msg}。請到 設定 → 應用程式 → H3 Live → 權限 開啟「附近裝置」`, 'err'); setStatus('連線失敗', 'err'); }
-    else { log(`連線失敗：${e?.name || ''} ${msg}`, 'err'); setStatus('連線失敗', 'err'); }
+    if (e?.name === 'NotFoundError' || /cancel|No device/i.test(msg)) { log('沒有選擇裝置（已取消或清單中沒有符合的裝置）。若清單是空的，請改按「列出全部藍牙裝置」。', 'warn'); setStatus(null, 'off'); }
+    else if (e?.name === 'SecurityError') { log(`被瀏覽器拒絕：${msg}（需要 HTTPS 與使用者點擊）`, 'err'); setStatus('DENIED', 'err'); }
+    else if (/permission|denied|not granted/i.test(msg)) { log(`沒有藍牙權限：${msg}。請到 設定 → 應用程式 → H3 Live → 權限 開啟「附近裝置」`, 'err'); setStatus('NO PERMISSION', 'err'); }
+    else { log(`連線失敗：${e?.name || ''} ${msg}`, 'err'); setStatus('FAILED', 'err'); }
     setButtons();
   }
 }
 
 async function openStream() {
-  setStatus('連線中…', 'wait');
+  setStatus('CONNECTING', 'wait');
   await ble.connect(device.id, onDisconnected);
   log('GATT 已連線，訂閱 FFF5 notify…');
   parser.resync();
@@ -93,7 +94,7 @@ async function openStream() {
   await writeCmd(CMD_ON);
   startedAt = performance.now(); lastDataAt = startedAt;
   stalledResends = 0; reconnectAttempt = 0; userStopped = false;
-  setStatus(`串流中：${device.name || ''}`, 'on');
+  setStatus(`LIVE ${device.name || ''}`, 'on');
   setButtons(); keepAwake(true).then(() => log('螢幕常亮已開啟')).catch((e) => log(`螢幕常亮失敗：${e.message}`, 'warn'));
   clearInterval(stallTimer);
   stallTimer = setInterval(watchdog, 2000);
@@ -110,9 +111,9 @@ async function watchdog() {
   if (document.visibilityState === 'hidden') return;
   const gap = (performance.now() - lastDataAt) / 1000;
   if (gap > 5) {
-    if (stalledResends < 3) { stalledResends++; setStatus(`訊號中斷 ${gap.toFixed(0)}s…`, 'wait'); log(`${gap.toFixed(0)} 秒沒資料，重送串流 ON（第 ${stalledResends} 次）`, 'warn'); await writeCmd(CMD_ON).catch(() => {}); }
+    if (stalledResends < 3) { stalledResends++; setStatus(`STALL ${gap.toFixed(0)}s`, 'wait'); log(`${gap.toFixed(0)} 秒沒資料，重送串流 ON（第 ${stalledResends} 次）`, 'warn'); await writeCmd(CMD_ON).catch(() => {}); }
     else { stalledResends = 0; log('超過 15 秒沒有資料，斷線重連', 'err'); try { await ble.disconnect(); } catch {} onDisconnected(); }
-  } else { stalledResends = 0; if (device) setStatus(`串流中：${device.name || ''}`, 'on'); }
+  } else { stalledResends = 0; if (device) setStatus(`LIVE ${device.name || ''}`, 'on'); }
 }
 
 async function disconnect() {
@@ -121,7 +122,7 @@ async function disconnect() {
   try { if (ble?.isConnected()) { await writeCmd(CMD_OFF); await new Promise(r => setTimeout(r, 350)); await writeCmd(CMD_OFF); log('已送串流 OFF'); } } catch {}
   try { await ble?.stopNotifications(); } catch {}
   try { await ble?.disconnect(); } catch {}
-  setStatus('未連線', 'off'); setButtons(); keepAwake(false).catch(() => {});
+  setStatus(null, 'off'); setButtons(); keepAwake(false).catch(() => {});
 }
 
 let reconnectTimer = null, reconnectAttempt = 0;
@@ -129,16 +130,16 @@ const MAX_RECONNECT = 5;
 function onDisconnected() {
   clearInterval(stallTimer);
   setButtons();
-  if (userStopped) { setStatus('未連線', 'off'); log('已斷線'); return; }
+  if (userStopped) { setStatus(null, 'off'); log('已斷線'); return; }
   reconnectAttempt++;
   if (reconnectAttempt > MAX_RECONNECT) {
-    setStatus('重連失敗', 'err');
+    setStatus('RECONNECT FAILED', 'err');
     log(`連續 ${MAX_RECONNECT} 次重連失敗，請手動按「連線 H3」`, 'err');
     userStopped = true; setButtons();
     return;
   }
   const delay = Math.min(3000 * reconnectAttempt, 10000);
-  setStatus(`重連中 ${reconnectAttempt}/${MAX_RECONNECT}…`, 'wait');
+  setStatus(`RETRY ${reconnectAttempt}/${MAX_RECONNECT}`, 'wait');
   log(`連線中斷，${(delay / 1000).toFixed(0)} 秒後第 ${reconnectAttempt} 次重連…`, 'warn');
   $('btnConnect').disabled = true; $('btnDisconnect').disabled = false;
   clearTimeout(reconnectTimer);
@@ -210,7 +211,7 @@ function liveStatus(s) {
 }
 function setTile(id, score, note) {
   const t = $(id), b = t.querySelector('b'), u = t.querySelector('u'), e = t.querySelector('em');
-  if (score == null) { b.textContent = '—'; u.style.width = '0'; u.style.background = '#9aa4b2'; e.textContent = note; e.style.background = ''; e.style.color = ''; return; }
+  if (score == null) { b.textContent = '—'; u.style.width = '0'; u.style.background = 'var(--muted)'; e.textContent = note; e.style.background = ''; e.style.color = ''; return; }
   const [txt, col] = liveStatus(score);
   b.textContent = score; u.style.width = score + '%'; u.style.background = col; e.textContent = note || txt; e.style.background = col; e.style.color = '#fff';
 }
@@ -392,7 +393,7 @@ if (!isNative && /SamsungBrowser/i.test(navigator.userAgent)) {
 if (isNative) {
   log('H3 Live app 就緒。開啟 H3 電源後按「連線 H3」，第一次會詢問藍牙／附近裝置權限，請允許。');
   createBle().then((b) => { ble = b; return b.available(); }).then((ok) => log(ok ? '藍牙已開啟' : '藍牙未開啟：請先開啟手機藍牙', ok ? 'ok' : 'err')).catch((e) => log(`藍牙初始化失敗：${e.message}`, 'err'));
-} else if (!navigator.bluetooth) { setStatus('此瀏覽器不支援 Web Bluetooth', 'err'); log('需要 Android Chrome（或 Mac/Windows 的 Chrome、Edge）。iPhone Safari 不支援。', 'err'); }
+} else if (!navigator.bluetooth) { setStatus('NO BLE', 'err'); log('需要 Android Chrome（或 Mac/Windows 的 Chrome、Edge）。iPhone Safari 不支援。', 'err'); }
 else {
   log('就緒。開啟 H3 電源後按「連線」，在清單中選 xb5… 裝置。');
   navigator.bluetooth.getAvailability?.().then(ok => log(ok ? '藍牙介面可用' : '藍牙介面不可用：請確認手機藍牙已開啟', ok ? 'ok' : 'err')).catch(() => {});
@@ -406,7 +407,7 @@ async function startSim() {
   if (simStarted) return; simStarted = true;
     const buf = new Uint8Array(await (await fetch('./test/h3_stream_sample.bin')).arrayBuffer());
     log('模擬模式：重播實機側錄樣本（無硬體）', 'warn');
-    setStatus('模擬串流', 'wait'); startedAt = performance.now(); lastDataAt = startedAt;
+    setStatus('SIM', 'wait'); startedAt = performance.now(); lastDataAt = startedAt;
     simMode = true; device = { name: 'xb51-sim' }; setButtons(); $('btnConnect').disabled = true;
     let pos = 0, seq = 0;
     // 14 payload bytes per notification, ~ (30 samples / 250 Hz) per block ≈ 120 ms per 230 B → ~7 ms per notification

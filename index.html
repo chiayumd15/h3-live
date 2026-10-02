@@ -6,88 +6,152 @@
 <title>H3 Live</title>
 <meta name="description" content="用手機藍牙直接連 H3 腦波儀，即時看波形、錄製 EDF、產生腦健康報告">
 <link rel="manifest" href="./manifest.webmanifest">
-<meta name="theme-color" content="#0f1419">
+<meta name="theme-color" content="#080c14">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="./icon.svg">
 <style>
-:root{--bg:#f6f7f9;--fg:#111827;--muted:#6b7280;--card:#fff;--line:#e5e7eb;--accent:#2563eb;--rec:#dc2626}
-@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0b0f14;--fg:#e5e7eb;--muted:#9aa4b2;--card:#141a21;--line:#2a3440;--accent:#3b82f6}}
+:root{
+  --bg:#f0f2f6;--fg:#1a1d26;--muted:#7b8194;
+  --card:#fff;--card-border:rgba(0,0,0,.06);--card-shadow:0 1px 3px rgba(0,0,0,.06);
+  --line:#e2e5ed;--accent:#2d6cf6;--accent-glow:rgba(45,108,246,.15);
+  --rec:#e03e3e;--green:#1a9a5a;--amber:#d48a0c;
+  --tile-bg:linear-gradient(135deg,#f7f8fb,#eef1f8);
+  --chart-border:rgba(0,0,0,.08);
+  --header-bg:rgba(255,255,255,.85);
+  --stats-bg:#f7f8fb;--stats-border:rgba(0,0,0,.04);
+  --log-bg:#fafbfd;
+  --bar-track:#e8ebf2;
+  --mono:'ui-monospace','SF Mono','Menlo','Cascadia Mono',monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
+  --bg:#080c14;--fg:#dfe3ed;--muted:#7d859e;
+  --card:#111827;--card-border:rgba(255,255,255,.06);--card-shadow:0 1px 4px rgba(0,0,0,.4);
+  --line:#1e2738;--accent:#4d8bf7;--accent-glow:rgba(77,139,247,.12);
+  --rec:#ef4444;--green:#22c55e;--amber:#f59e0b;
+  --tile-bg:linear-gradient(135deg,#111827,#151d2e);
+  --chart-border:rgba(255,255,255,.04);
+  --header-bg:rgba(8,12,20,.85);
+  --stats-bg:#0d1220;--stats-border:rgba(255,255,255,.04);
+  --log-bg:#0b1018;
+  --bar-track:#1a2236;
+}}
 *{box-sizing:border-box}
 html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,"Noto Sans TC",sans-serif;
-  padding:10px 14px calc(12px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px;min-height:100dvh}
-header{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-h1{font-size:18px;margin:0}
-.status{font-size:12px;padding:3px 10px;border-radius:999px;background:var(--line);white-space:nowrap}
-.status.on{background:#16a34a;color:#fff}.status.err{background:#dc2626;color:#fff}.status.wait{background:#f59e0b;color:#111}
-#browserWarn{display:none;background:#dc2626;color:#fff;padding:10px 14px;border-radius:10px;font-size:14px}
-#browserWarn a{display:inline-block;margin-top:8px;background:#fff;color:#dc2626;font-weight:700;padding:8px 14px;border-radius:8px;text-decoration:none}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font:15px/1.45 'Inter',system-ui,-apple-system,"Noto Sans TC",sans-serif;
+  padding:10px 14px calc(12px + env(safe-area-inset-bottom));
+  display:flex;flex-direction:column;gap:10px;min-height:100dvh}
 
-#chart{width:100%;height:48vh;min-height:240px;border:1px solid var(--line);border-radius:12px;background:var(--card);display:block;touch-action:none}
+/* ── header ── */
+header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:8px 14px;margin:-10px -14px 0;
+  background:var(--header-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--card-border);position:sticky;top:0;z-index:10}
+h1{font-size:17px;margin:0;font-weight:700;letter-spacing:.3px;display:flex;align-items:center;gap:8px}
+h1::before{content:'';display:block;width:8px;height:8px;border-radius:50%;background:var(--accent);
+  box-shadow:0 0 6px var(--accent),0 0 12px var(--accent-glow)}
+.status{font:600 11px/1 var(--mono);padding:4px 10px;border-radius:6px;
+  background:var(--line);white-space:nowrap;letter-spacing:.3px;text-transform:uppercase}
+.status.on{background:var(--green);color:#fff;box-shadow:0 0 8px rgba(26,154,90,.3)}
+.status.err{background:var(--rec);color:#fff}
+.status.wait{background:var(--amber);color:#111}
+
+#browserWarn{display:none;background:var(--rec);color:#fff;padding:10px 14px;border-radius:10px;font-size:14px}
+#browserWarn a{display:inline-block;margin-top:8px;background:#fff;color:var(--rec);font-weight:700;padding:8px 14px;border-radius:8px;text-decoration:none}
+
+/* ── chart ── */
+#chart{width:100%;height:48vh;min-height:240px;border-radius:14px;background:var(--card);display:block;touch-action:none;
+  box-shadow:var(--card-shadow);border:1px solid var(--chart-border)}
 
 .side{display:flex;flex-direction:column;gap:10px}
+
+/* ── controls ── */
 .controls{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .controls .wide{grid-column:1/-1}
-button,select{font:inherit;font-size:15px;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--fg);cursor:pointer;min-height:44px}
-button:disabled{opacity:.4;cursor:default}
-#btnConnect{background:var(--accent);color:#fff;border-color:transparent;font-weight:600}
+button,select{font:inherit;font-size:14px;padding:11px 12px;border-radius:10px;
+  border:1px solid var(--line);background:var(--card);color:var(--fg);cursor:pointer;min-height:44px;
+  transition:background .15s,border-color .15s,box-shadow .15s}
+button:active:not(:disabled){transform:scale(.97)}
+button:disabled{opacity:.35;cursor:default}
+#btnConnect{background:var(--accent);color:#fff;border-color:transparent;font-weight:700;
+  box-shadow:0 2px 8px var(--accent-glow)}
+#btnConnect:hover:not(:disabled){box-shadow:0 4px 16px var(--accent-glow)}
 #btnRec{color:var(--rec);font-weight:700;border-color:var(--rec)}
-#btnRec.recording{background:var(--rec);color:#fff}
+#btnRec.recording{background:var(--rec);color:#fff;animation:pulse-rec 1.6s ease-in-out infinite}
+@keyframes pulse-rec{0%,100%{box-shadow:0 0 0 0 rgba(224,62,62,.3)}50%{box-shadow:0 0 0 8px rgba(224,62,62,0)}}
 #btnReport{font-weight:600}
 .sub{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
 .sub button{min-height:0;padding:4px 10px;font-size:12px}
 
+/* ── live tiles ── */
 .live{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto auto;gap:2px 8px;align-items:center}
-.tile span{grid-column:1/-1;font-size:12px;color:var(--muted)}
-.tile b{font-size:28px;line-height:1.1;font-variant-numeric:tabular-nums}
-.tile em{font-style:normal;font-size:12px;padding:2px 8px;border-radius:999px;background:var(--line);color:var(--fg);justify-self:end}
-.tile i{grid-column:1/-1;display:block;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
-.tile i u{display:block;height:100%;width:0;background:#9aa4b2;border-radius:3px;transition:width .6s}
-.stats{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:13px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
-.stats div span{color:var(--muted);display:block;font-size:11px}
+.tile{background:var(--tile-bg);border:1px solid var(--card-border);border-radius:14px;
+  padding:12px 14px;display:flex;flex-direction:column;gap:6px;
+  box-shadow:var(--card-shadow);position:relative;overflow:hidden}
+.tile span{font-size:11px;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;font-weight:600}
+.tile .score-row{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.tile b{font:700 36px/1 var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-1px}
+.tile em{font-style:normal;font-size:11px;padding:3px 10px;border-radius:6px;background:var(--bar-track);
+  color:var(--fg);font-weight:600;white-space:nowrap}
+.tile i{display:block;height:5px;border-radius:3px;background:var(--bar-track);overflow:hidden}
+.tile i u{display:block;height:100%;width:0;background:var(--muted);border-radius:3px;transition:width .6s,background .4s}
+
+/* ── stats ── */
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;
+  font:12px/1.5 var(--mono);background:var(--stats-bg);border:1px solid var(--stats-border);
+  border-radius:10px;padding:8px 12px}
+.stats div span{color:var(--muted);display:block;font:11px/1.3 system-ui,sans-serif;font-weight:500}
+.stats div b{font-weight:600;font-variant-numeric:tabular-nums}
 .stats .wide{grid-column:1/-1}
 
-#log{font:12px/1.5 ui-monospace,Menlo,monospace;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 10px;height:150px;overflow:auto;white-space:pre-wrap;word-break:break-all}
-#log .err{color:#dc2626}#log .warn{color:#d97706}#log .ok{color:#16a34a}
+/* ── log ── */
+#log{font:11px/1.5 var(--mono);background:var(--log-bg);border:1px solid var(--stats-border);
+  border-radius:10px;padding:8px 10px;height:130px;overflow:auto;white-space:pre-wrap;word-break:break-all;
+  color:var(--muted)}
+#log .err{color:var(--rec)}#log .warn{color:var(--amber)}#log .ok{color:var(--green)}
 .note{font-size:12px;color:var(--muted);margin:0}
 
-/* 橫向（手機與平板）：左波形、右側欄 */
+/* ── landscape (phone & tablet) ── */
 @media (orientation:landscape) and (min-width:640px){
   html,body{height:100dvh}
-  body{display:grid;grid-template-columns:minmax(0,1fr) clamp(300px,30vw,400px);grid-template-rows:auto minmax(0,1fr);gap:8px 14px;height:100dvh;overflow:hidden;padding:10px 14px}
+  body{display:grid;grid-template-columns:minmax(0,1fr) clamp(300px,30vw,400px);
+    grid-template-rows:auto minmax(0,1fr);gap:8px 14px;height:100dvh;overflow:hidden;padding:10px 14px}
   header,#browserWarn{grid-column:1/-1}
+  header{position:static;margin:0 -14px;padding:6px 14px}
   #chart{grid-column:1;grid-row:2;height:100%;min-height:0}
   .side{grid-column:2;grid-row:2;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding-right:2px}
   #log{height:auto;flex:1;min-height:80px}
   .note{display:none}
 }
-/* 手機橫向（矮螢幕）：再壓縮一層 */
+/* compact phone landscape */
 @media (orientation:landscape) and (min-width:640px) and (max-height:600px){
   body{gap:4px 10px;padding:6px 10px;grid-template-columns:minmax(0,1fr) 300px}
-  h1{font-size:15px}
-  .status{font-size:11px;padding:2px 8px}
+  header{padding:4px 10px}
+  h1{font-size:15px} h1::before{width:6px;height:6px}
+  .status{font-size:10px;padding:2px 8px}
   .side{gap:5px}
   .controls{gap:5px}
   button,select{min-height:34px;padding:5px 8px;font-size:13px;border-radius:8px}
   .sub{font-size:11px}
-  .stats{font-size:11px;padding:6px 8px;gap:3px 6px;border-radius:8px}
-  .tile{padding:6px 8px;border-radius:8px}.tile b{font-size:20px}.tile span,.tile em{font-size:10px}
-  .stats div span{font-size:10px}
+  .stats{font-size:10px;padding:6px 8px;gap:3px 6px;border-radius:8px}
+  .tile{padding:8px 10px;border-radius:10px;gap:4px}.tile b{font-size:24px}.tile span{font-size:9px}.tile em{font-size:9px;padding:2px 6px}
+  .stats div span{font-size:9px}
   #log{height:90px;flex:none;font-size:10px;padding:5px 7px;border-radius:8px}
 }
 
-/* 報告資料對話框 */
-dialog{border:none;border-radius:14px;padding:18px;background:var(--card);color:var(--fg);width:min(92vw,380px)}
-dialog::backdrop{background:rgba(0,0,0,.5)}
+/* ── dialogs ── */
+dialog{border:none;border-radius:16px;padding:20px;background:var(--card);color:var(--fg);
+  width:min(92vw,380px);box-shadow:0 8px 32px rgba(0,0,0,.25)}
+dialog::backdrop{background:rgba(0,0,0,.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
 dialog h2{margin:0 0 10px;font-size:16px}
 dialog label{display:block;font-size:13px;color:var(--muted);margin-top:8px}
-dialog input,dialog select{width:100%;font:inherit;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);margin-top:4px;min-height:0}
+dialog input,dialog select{width:100%;font:inherit;padding:9px 10px;border-radius:8px;
+  border:1px solid var(--line);background:var(--bg);color:var(--fg);margin-top:4px;min-height:0}
 dialog .row{display:flex;gap:8px;margin-top:14px}
 dialog .row button{flex:1}
 
-/* 報告預覽覆蓋層 */
-#reportOverlay{position:fixed;inset:0;background:rgba(2,6,23,.9);z-index:9999;display:none;flex-direction:column;padding:10px;gap:8px}
+/* ── report overlay ── */
+#reportOverlay{position:fixed;inset:0;background:rgba(2,6,23,.92);z-index:9999;display:none;flex-direction:column;padding:10px;gap:8px}
 #reportOverlay.show{display:flex}
 #reportOverlay .bar{display:flex;gap:8px;flex-shrink:0}
 #reportOverlay .bar button{flex:1;background:#2457a8;color:#fff;border:none;font-weight:600}
@@ -97,7 +161,7 @@ dialog .row button{flex:1}
 </head>
 <body>
 <div id="browserWarn">目前是<b>三星瀏覽器</b>，它的藍牙清單永遠是空的。請改用 Chrome 開啟，並在 Chrome 裡「加到主畫面」。<br><a id="openChrome" href="#">用 Chrome 開啟</a></div>
-<header><h1>H3 Live</h1><span id="status" class="status off">未連線</span></header>
+<header><h1>H3 Live</h1><span id="status" class="status off">STANDBY</span></header>
 
 <canvas id="chart"></canvas>
 
@@ -113,19 +177,19 @@ dialog .row button{flex:1}
     <button id="btnReport" class="wide" disabled>產生腦健康報告</button>
   </div>
   <div class="live">
-    <div class="tile" id="liveStress"><span>壓力與神經平衡</span><b>—</b><i><u></u></i><em>等待訊號</em></div>
-    <div class="tile" id="liveFocus"><span>專注與警覺</span><b>—</b><i><u></u></i><em>等待訊號</em></div>
+    <div class="tile" id="liveStress"><span>壓力與神經平衡</span><div class="score-row"><b>—</b><em>等待訊號</em></div><i><u></u></i></div>
+    <div class="tile" id="liveFocus"><span>專注與警覺</span><div class="score-row"><b>—</b><em>等待訊號</em></div><i><u></u></i></div>
   </div>
   <div class="sub"><span>找不到裝置時：</span><button id="btnConnectAll">列出全部藍牙裝置</button></div>
 
   <div class="stats">
     <div><span>樣本數</span><b id="stSamples">0</b></div>
-    <div><span>實際取樣率</span><b id="stRate">—</b></div>
-    <div><span>區塊 / 丟失 / 校驗錯 / 框錯</span><b id="stBlocks">—</b></div>
+    <div><span>取樣率</span><b id="stRate">—</b></div>
+    <div><span>區塊 / 丟 / 錯 / 框</span><b id="stBlocks">—</b></div>
     <div><span>電池</span><b id="stBat">—</b></div>
     <div><span>錄製</span><b id="stRec">—</b></div>
     <div><span>通知 / 位元組</span><b id="stNotif">0</b></div>
-    <div class="wide"><span>最近 1 秒峰對峰 (µV)</span><b id="stPP">—</b></div>
+    <div class="wide"><span>峰對峰 µV (1s)</span><b id="stPP">—</b></div>
   </div>
 
   <div class="sub"><span>紀錄</span><button id="btnClear">清除</button></div>
@@ -138,7 +202,7 @@ dialog .row button{flex:1}
   <p style="margin:0 0 6px;font-size:13px;color:var(--muted)">要怎麼處理這段錄音？之後仍可按「產生腦健康報告」。</p>
   <div class="row" style="flex-direction:column">
     <button id="stopSaveEdf" type="button">儲存 EDF 檔</button>
-    <button id="stopReport" type="button" style="background:#2457a8;color:#fff;border:none;font-weight:600">直接產生報告</button>
+    <button id="stopReport" type="button" style="background:var(--accent);color:#fff;border:none;font-weight:600">直接產生報告</button>
     <button id="stopLater" type="button">稍後再說</button>
   </div>
 </dialog>
@@ -148,7 +212,7 @@ dialog .row button{flex:1}
   <label>姓名<input id="rpName" placeholder="未命名" autocomplete="off"></label>
   <label>年齡<input id="rpAge" inputmode="numeric" placeholder="選填"></label>
   <label>性別<select id="rpSex"><option value="">不填</option><option>男</option><option>女</option></select></label>
-  <div class="row"><button id="rpCancel" type="button">取消</button><button id="rpOk" type="button" style="background:#2457a8;color:#fff;border:none;font-weight:600">產生</button></div>
+  <div class="row"><button id="rpCancel" type="button">取消</button><button id="rpOk" type="button" style="background:var(--accent);color:#fff;border:none;font-weight:600">產生</button></div>
 </dialog>
 
 <div id="reportOverlay">
