@@ -16,7 +16,12 @@ const H3 = (function() {
     trimSec: 5,
     // 頭尾各去 5 秒（按鍵、調整頭帶）
     bands: { delta: [1, 4], theta: [4, 8], alpha: [8, 13], beta: [13, 30], gamma: [30, 45] },
-    minUsableSec: 60
+    minUsableSec: 60,
+    // 電極接觸偵測（2026-10-02 以空接 vs 貼好樣本校正：空接 RMS≈3.6 µV、頻譜斜率≈−0.7；貼好 RMS 28–85、斜率 −1.8～−2.8）
+    contactMinRms: 8,
+    // 1–45 Hz RMS 中位數低於此（µV）視為未接觸
+    contactMaxSlope: -1.2
+    // 2–30 Hz log-log 頻譜斜率高於此（太平＝白雜訊）視為未接觸
     // 乾淨訊號不足 60 秒 → 標示品質不足
   };
   function ascii(bytes, s, n) {
@@ -339,6 +344,15 @@ const H3 = (function() {
     }
     return { sd: c ? Math.sqrt(m2 / c) : 0, perWin: per, stillFrac: per.length ? per.filter((v) => v < 15).length / per.length : 1 };
   }
+  // 2–30 Hz log-log 斜率：真腦波 1/f 約 −2，空接白雜訊接近 0
+  function spectralSlope(psd, binHz) {
+    const xs = [], ys = [];
+    for (let k = 0; k < psd.length; k++) { const f = (k + 1) * binHz; if (f >= 2 && f <= 30 && psd[k] > 0) { xs.push(Math.log10(f)); ys.push(Math.log10(psd[k])); } }
+    if (xs.length < 4) return 0;
+    const mx = mean(xs), my = mean(ys); let sxy = 0, sxx = 0;
+    for (let i = 0; i < xs.length; i++) { sxy += (xs[i] - mx) * (ys[i] - my); sxx += (xs[i] - mx) ** 2; }
+    return sxx ? sxy / sxx : 0;
+  }
   function analyze(edf, opts) {
     opts = opts || {};
     const { eeg, acc } = selectChannels(edf);
@@ -356,10 +370,13 @@ const H3 = (function() {
         flatFrac: mean(c.wins.map((w) => w.flat)),
         line60: c.line60,
         rmsMedian: median(c.wins.filter((w) => !w.bad).map((w) => w.rms)),
+        slope: spectralSlope(c.psd, c.binHz),
         usable: bad < 0.5
       };
     });
-    const useIdx = chQ.map((q, i) => q.usable ? i : -1).filter((i) => i >= 0);
+    for (const q of chQ) q.contact = q.rmsMedian >= CFG.contactMinRms && q.slope <= CFG.contactMaxSlope;
+    const contactOk = chQ.some((q) => q.contact);
+    const useIdx = chQ.map((q, i) => q.usable && (!contactOk || q.contact) ? i : -1).filter((i) => i >= 0);
     const used = (useIdx.length ? useIdx : chans.map((c, i) => i)).map((i) => chans[i]);
     const wins = [];
     for (let i = 0; i < nWin; i++) {
@@ -446,7 +463,8 @@ const H3 = (function() {
       hasAcc: !!acc,
       usableSec,
       usableFrac,
-      lowQuality: usableSec < CFG.minUsableSec,
+      lowQuality: usableSec < CFG.minUsableSec || !contactOk,
+      contact: { ok: contactOk, channels: chQ.map((q) => ({ name: q.name, contact: q.contact, rms: q.rmsMedian, slope: q.slope })) },
       bands,
       bandsByChannel: bandsCh,
       peak,

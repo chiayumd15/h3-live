@@ -76,10 +76,10 @@ async function openStream() {
   setStatus('連線中…', 'wait');
   await ble.connect(device.id, onDisconnected);
   log('GATT 已連線，訂閱 FFF5 notify…');
+  parser.resync(); // before the first notification, so a device switch is not counted as lost blocks
   await ble.startNotifications(onNotify);
   log('送出串流 ON (KYXB 10 80 00)');
   await writeCmd(CMD_ON);
-  parser.resync();
   startedAt = performance.now(); lastDataAt = startedAt;
   setStatus(`串流中：${device.name || ''}`, 'on');
   setButtons(); keepAwake(true).then(() => log('螢幕常亮已開啟')).catch((e) => log(`螢幕常亮失敗：${e.message}`, 'warn'));
@@ -158,11 +158,11 @@ function onNotify(u8) {
 }
 
 // ---------- stats ----------
-const rateHist = []; // [t, samples] pairs for a 5-second sliding-window rate
+const rateHist = []; // [t, samples] pairs for a 15-second sliding-window rate (Android BLE delivers in bursts)
 function updateStats() {
   const s = parser.stats;
   const now = performance.now();
-  rateHist.push([now, samples]); while (rateHist.length > 2 && now - rateHist[0][0] > 5000) rateHist.shift();
+  rateHist.push([now, samples]); while (rateHist.length > 2 && now - rateHist[0][0] > 15000) rateHist.shift();
   const dt = (now - rateHist[0][0]) / 1000, dn = samples - rateHist[0][1];
   $('stSamples').textContent = samples.toLocaleString();
   $('stRate').textContent = dt > 2 && dn > 0 ? (dn / dt).toFixed(1) + ' Hz' : '—';
@@ -201,7 +201,8 @@ function updateLive() {
     for (let i = 0; i < LIVE_N; i++) { const j = (rawHead + i) % LIVE_N; fp1[i] = rawRing[0][j]; fp2[i] = rawRing[1][j]; }
     const mk = (label, data) => ({ label, unit: 'uV', transducer: 'H3', fs: RATE, pmin: -25207.6, pmax: 25208.3, data });
     const res = H3.analyze({ start: new Date(), durationSec: LIVE_SEC, nRec: LIVE_SEC, recDur: 1, patient: '', recording: 'live', signals: [mk('EEG1', fp1), mk('EEG2', fp2)] });
-    if (!(res.usableFrac >= 0.5)) { setTile('liveStress', null, '訊號不佳'); setTile('liveFocus', null, '訊號不佳'); }
+    if (res.contact && !res.contact.ok) { setTile('liveStress', null, '未偵測到電極'); setTile('liveFocus', null, '未偵測到電極'); }
+    else if (!(res.usableFrac >= 0.5)) { setTile('liveStress', null, '訊號不佳'); setTile('liveFocus', null, '訊號不佳'); }
     else { setTile('liveStress', res.scores.stress); setTile('liveFocus', res.scores.focus); }
     lastLiveAt = performance.now();
   } catch (e) { setTile('liveStress', null, '計算失敗'); setTile('liveFocus', null, '計算失敗'); console.error(e); }
@@ -340,7 +341,8 @@ $('rpOk').onclick = () => {
     $('reportFrame').srcdoc = r.html.replace('#toolbar { display: flex; }', '#toolbar { display: none; }')
       .replace('</head>', `<style>@media screen { .page { zoom: ${zoom.toFixed(3)}; margin: 8px auto; } body { margin: 0; } }</style></head>`);
     $('reportOverlay').classList.add('show');
-    log(`報告完成：${r.no} 總分 ${r.res.scores.overall}`, 'ok');
+    if (r.res.contact && !r.res.contact.ok) log('報告：未偵測到電極訊號，分數無效（請確認電極貼合後重錄）', 'err');
+    else log(`報告完成：${r.no} 總分 ${r.res.scores.overall}`, 'ok');
   } catch (e) { log(`產生報告失敗：${e.message}`, 'err'); console.error(e); }
 };
 $('rpClose').onclick = () => $('reportOverlay').classList.remove('show');

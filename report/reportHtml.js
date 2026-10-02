@@ -187,7 +187,8 @@ function statusOf(s) {
   if (s >= 50) return { text: "\u5EFA\u8B70\u8FFD\u8E64", color: "#7b56b8" };
   return { text: "\u5EFA\u8B70\u8A55\u4F30", color: "#c0392b" };
 }
-function verdictOf(s, lowQ) {
+function verdictOf(s, lowQ, noContact) {
+  if (noContact) return { text: "\u672A\u5075\u6E2C\u5230\u96FB\u6975\u8A0A\u865F", color: "#c0392b", note: "\u672C\u6B21\u8A18\u9304\u770B\u8D77\u4F86\u6C92\u6709\u8CBC\u597D\u96FB\u6975\uFF08\u8A0A\u865F\u592A\u5C0F\u3001\u983B\u8B5C\u50CF\u96DC\u8A0A\uFF09\uFF0C\u5206\u6578\u7121\u6548\u3002\u8ACB\u78BA\u8A8D\u96FB\u6975\u8CBC\u5408\u5F8C\u91CD\u65B0\u9304\u88FD\u3002" };
   if (lowQ) return { text: "\u8A0A\u865F\u54C1\u8CEA\u4E0D\u8DB3", color: "#8a94a6", note: "\u672C\u6B21\u53EF\u7528\u8A0A\u865F\u4E0D\u8DB3\uFF0C\u5206\u6578\u50C5\u4F9B\u53C3\u8003\u3002\u5EFA\u8B70\u78BA\u8A8D\u96FB\u6975\u8CBC\u5408\u3001\u4FDD\u6301\u975C\u6B62\u4E26\u91CD\u65B0\u9304\u88FD 3 \u5206\u9418\u3002" };
   if (s >= 80) return { text: "\u8868\u73FE\u826F\u597D", color: "#2f9e9a", note: "\u672C\u6B21\u5404\u9805\u6307\u6A19\u5927\u81F4\u7A69\u5B9A\uFF0C\u5EFA\u8B70\u7DAD\u6301\u76EE\u524D\u751F\u6D3B\u578B\u614B\u4E26\u5B9A\u671F\u8FFD\u8E64\u3002" };
   if (s >= 65) return { text: "\u5EFA\u8B70\u6301\u7E8C\u8FFD\u8E64", color: "#3fa7a0", note: "\u672C\u6B21\u6574\u9AD4\u5C1A\u53EF\uFF0C\u90E8\u5206\u6307\u6A19\u6709\u6539\u5584\u7A7A\u9593\uFF0C\u5EFA\u8B70\u6301\u7E8C\u8FFD\u8E64\u3002" };
@@ -283,7 +284,7 @@ function trendText(points) {
   return "\u6574\u9AD4\u8DA8\u52E2\u5927\u81F4\u6301\u5E73\uFF0C\u5EFA\u8B70\u6301\u7E8C\u8FFD\u8E64\u3002";
 }
 function renderReport(c) {
-  const r = c.res, S = r.scores, v = verdictOf(S.overall, r.lowQuality);
+  const r = c.res, S = r.scores, noContact = !!(r.contact && !r.contact.ok), v = verdictOf(S.overall, r.lowQuality, noContact);
   const start = new Date(r.start), points = [...c.prev.map((p) => ({ v: p.overall, label: fmtYM(new Date(p.ts)) })), { v: S.overall, label: fmtYM(start) }];
   const adv = advices(r, c.prev);
   const icon = (id) => `<svg><use href="#${id}"/></svg>`;
@@ -309,7 +310,8 @@ function renderReport(c) {
     <div class="pill-big" style="background:${v.color}"><svg><use href="#ico-shield"/></svg>${v.text}</div>
     <div class="note">${v.note}</div></div>
 </div>
-${r.lowQuality ? `<div class="quality-warn">\u26A0 \u53EF\u7528\u8A0A\u865F ${Math.round(r.usableSec)} \u79D2\uFF08${Math.round(r.usableFrac * 100)}%\uFF09\uFF0C\u4F4E\u65BC ${r.cfg.minUsableSec} \u79D2\u9580\u6ABB\uFF1B\u5206\u6578\u50C5\u4F9B\u53C3\u8003\u3002</div>` : ""}
+${noContact ? `<div class="quality-warn" style="background:#fdecea;border-color:#f5b7b1;color:#c0392b">\u26A0 \u672A\u5075\u6E2C\u5230\u96FB\u6975\u8A0A\u865F\uFF08FP1 RMS ${r.contact.channels[0].rms.toFixed(1)} µV\u3001\u659C\u7387 ${r.contact.channels[0].slope.toFixed(2)}\uFF1BFP2 RMS ${r.contact.channels[1] ? r.contact.channels[1].rms.toFixed(1) : "-"} µV\uFF09\uFF0C\u672C\u5831\u544A\u5206\u6578\u7121\u6548\u3002</div>` : ""}
+${r.lowQuality && !noContact ? `<div class="quality-warn">\u26A0 \u53EF\u7528\u8A0A\u865F ${Math.round(r.usableSec)} \u79D2\uFF08${Math.round(r.usableFrac * 100)}%\uFF09\uFF0C\u4F4E\u65BC ${r.cfg.minUsableSec} \u79D2\u9580\u6ABB\uFF1B\u5206\u6578\u50C5\u4F9B\u53C3\u8003\u3002</div>` : ""}
 <div class="grid2">${DIMS.map(dimCard).join("")}</div>
 <div class="grid2">
   <div class="card chart-card"><div class="sec-title">${icon("ico-radar")}\u672C\u6B21\u8166\u5065\u5EB7\u8F2A\u5ED3</div>${radar(S)}<div class="foot-note">\u5206\u6578\u7BC4\u570D\uFF1A0\u2013100 \u5206\uFF08\u5206\u6578\u8D8A\u9AD8\u4EE3\u8868\u8868\u73FE\u8D8A\u4F73\uFF09</div></div>
