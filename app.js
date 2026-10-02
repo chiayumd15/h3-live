@@ -263,20 +263,26 @@ function draw() {
   if (canvas.width !== W * dpr || canvas.height !== H * dpr) { canvas.width = W * dpr; canvas.height = H * dpr; }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const dark = !matchMedia('(prefers-color-scheme: light)').matches;
-  ctx.fillStyle = dark ? '#0d1117' : '#fff'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = dark ? '#06090f' : '#fff'; ctx.fillRect(0, 0, W, H);
   const lanes = showCh, len = rings[0].length;
-  const accH = showAcc ? Math.max(36, H * 0.11) : 0; // each X/Y/Z lane (3 lanes ≈ 1/3 of chart)
+  const accH = showAcc ? Math.max(36, H * 0.11) : 0;
   const laneH = (H - accH * 3) / lanes;
-  ctx.font = '12px system-ui'; ctx.textBaseline = 'top';
+  // grid
+  ctx.strokeStyle = dark ? '#0f1520' : '#f0f0f0'; ctx.lineWidth = 0.5;
+  const gx = W / 10, gy = H / 8;
+  for (let x = gx; x < W; x += gx) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+  for (let y = gy; y < H; y += gy) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+  ctx.lineWidth = 1;
+  ctx.font = '11px system-ui'; ctx.textBaseline = 'top';
   if (showAcc) {
     const ACC_RANGE = 2; // ±2 g
     for (let c = 0; c < 3; c++) {
       const y0 = lanes * laneH + c * accH, mid = y0 + accH / 2, k = accH / 2 / ACC_RANGE;
-      ctx.fillStyle = dark ? '#0a0f16' : '#f8fafc'; ctx.fillRect(0, y0, W, accH);
+      ctx.fillStyle = dark ? '#080c13' : '#f8fafc'; ctx.fillRect(0, y0, W, accH);
       ctx.strokeStyle = dark ? '#1a2332' : '#e5e7eb'; ctx.beginPath(); ctx.moveTo(0, y0); ctx.lineTo(W, y0); ctx.stroke();
       ctx.fillStyle = dark ? '#6e7a92' : '#6b7280'; ctx.font = '12px system-ui'; ctx.fillText(`${ACC_NAMES[c]} ±2 g`, 6, y0 + 2);
       ctx.save(); ctx.beginPath(); ctx.rect(0, y0, W, accH); ctx.clip();
-      ctx.strokeStyle = ['#f59e0b', '#0891b2', '#64748b'][c]; ctx.lineWidth = 1; ctx.beginPath();
+      ctx.strokeStyle = ['#ffb74d', '#4dd0e1', '#90a4ae'][c]; ctx.lineWidth = 1; ctx.beginPath();
       for (let x = 0; x < W; x++) {
         const idx = Math.floor(x / W * len), i = (head + idx) % len;
         if (idx >= len - filled) { const y = mid - accRings[c][i] * k; x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
@@ -291,7 +297,7 @@ function draw() {
     ctx.strokeStyle = dark ? '#1a2332' : '#e5e7eb'; ctx.beginPath(); ctx.moveTo(0, y0 + laneH); ctx.lineTo(W, y0 + laneH); ctx.stroke();
     ctx.fillStyle = dark ? '#6e7a92' : '#6b7280'; ctx.fillText(`${CH_NAMES[c]}  ±${scaleUv} µV`, 6, y0 + 4);
     ctx.save(); ctx.beginPath(); ctx.rect(0, y0, W, laneH); ctx.clip();
-    ctx.strokeStyle = ['#00bcd4', '#00e676', '#ff5252', '#b388ff'][c]; ctx.lineWidth = 1.4; ctx.beginPath();
+    ctx.strokeStyle = ['#4fc3f7', '#80cbc4', '#e57373', '#b39ddb'][c]; ctx.lineWidth = 1.4; ctx.beginPath();
     const mid = y0 + laneH / 2, k = laneH / 2 / scaleUv;
     for (let x = 0; x < W; x++) {
       const idx = Math.floor(x / W * len); // left = oldest
