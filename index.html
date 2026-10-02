@@ -37,6 +37,13 @@ button:disabled{opacity:.4;cursor:default}
 .sub{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
 .sub button{min-height:0;padding:4px 10px;font-size:12px}
 
+.live{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto auto;gap:2px 8px;align-items:center}
+.tile span{grid-column:1/-1;font-size:12px;color:var(--muted)}
+.tile b{font-size:28px;line-height:1.1;font-variant-numeric:tabular-nums}
+.tile em{font-style:normal;font-size:12px;padding:2px 8px;border-radius:999px;background:var(--line);color:var(--fg);justify-self:end}
+.tile i{grid-column:1/-1;display:block;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.tile i u{display:block;height:100%;width:0;background:#9aa4b2;border-radius:3px;transition:width .6s}
 .stats{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:13px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
 .stats div span{color:var(--muted);display:block;font-size:11px}
 .stats .wide{grid-column:1/-1}
@@ -65,6 +72,7 @@ button:disabled{opacity:.4;cursor:default}
   button,select{min-height:34px;padding:5px 8px;font-size:13px;border-radius:8px}
   .sub{font-size:11px}
   .stats{font-size:11px;padding:6px 8px;gap:3px 6px;border-radius:8px}
+  .tile{padding:6px 8px;border-radius:8px}.tile b{font-size:20px}.tile span,.tile em{font-size:10px}
   .stats div span{font-size:10px}
   #log{height:90px;flex:none;font-size:10px;padding:5px 7px;border-radius:8px}
 }
@@ -103,6 +111,10 @@ dialog .row button{flex:1}
       <option value="50">±50 µV</option><option value="100">±100 µV</option><option value="200" selected>±200 µV</option><option value="500">±500 µV</option><option value="2000">±2000 µV</option>
     </select>
     <button id="btnReport" class="wide" disabled>產生腦健康報告</button>
+  </div>
+  <div class="live">
+    <div class="tile" id="liveStress"><span>壓力與神經平衡</span><b>—</b><i><u></u></i><em>等待訊號</em></div>
+    <div class="tile" id="liveFocus"><span>專注與警覺</span><b>—</b><i><u></u></i><em>等待訊號</em></div>
   </div>
   <div class="sub"><span>找不到裝置時：</span><button id="btnConnectAll">列出全部藍牙裝置</button></div>
 

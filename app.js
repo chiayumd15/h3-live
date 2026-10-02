@@ -1,5 +1,6 @@
 import { H3Parser } from './h3parser.js';
 import { buildReport } from './report/reportHtml.js';
+import { H3 } from './report/h3core.js';
 import { createBle, isNative } from './ble.js';
 import { saveFile, keepAwake } from './platform.js';
 
@@ -27,6 +28,10 @@ let samples = 0, notifs = 0, bytes = 0, lastDataAt = 0, startedAt = 0;
 let battery = null, userStopped = false, stallTimer = null;
 const rings = CH_NAMES.map(() => new Float32Array(RATE * WIN_SEC));
 const ACC_NAMES = ['X', 'Y', 'Z'], ACC_LSB_PER_G = 8192;
+// raw (unfiltered) µV of FP1/FP2 for the live indices: 40 s → 5 s trimmed each end by the engine → 30 s analysed
+const LIVE_SEC = 40, LIVE_N = RATE * LIVE_SEC;
+const rawRing = [new Float32Array(LIVE_N), new Float32Array(LIVE_N)];
+let rawHead = 0, rawFilled = 0;
 const accRings = ACC_NAMES.map(() => new Float32Array(RATE * WIN_SEC));
 let head = 0; // write index into rings
 let filled = 0;
@@ -138,6 +143,7 @@ function onNotify(u8) {
       for (let c = 0; c < 4; c++) {
         const raw = e.channels[c] ? e.channels[c][i] : 0;
         const uv = raw * UV_PER_LSB;
+        if (c < 2) rawRing[c][rawHead] = uv;
         // high-pass
         const y = hpAlpha * (hpPrevOut[c] + uv - hpPrevIn[c]); hpPrevIn[c] = uv; hpPrevOut[c] = y;
         rings[c][head] = y;
@@ -145,6 +151,7 @@ function onNotify(u8) {
       }
       for (let c = 0; c < 3; c++) { const ac = e.channels[4 + c]; accRings[c][head] = ac && ac.length ? ac[Math.min(ac.length - 1, Math.floor(i / 5))] / ACC_LSB_PER_G : 0; }
       head = (head + 1) % rings[0].length; filled = Math.min(filled + 1, rings[0].length); samples++;
+      rawHead = (rawHead + 1) % LIVE_N; rawFilled = Math.min(rawFilled + 1, LIVE_N);
     }
     if (recording) { const a = e.channels; for (let k = 0; k < (a[4]?.length || 0); k++) { rec.acc[0].push(a[4][k]); rec.acc[1].push(a[5][k]); rec.acc[2].push(a[6][k]); } }
   }
@@ -168,6 +175,39 @@ function updateStats() {
   for (let c = 0; c < showCh; c++) { let mn = Infinity, mx = -Infinity; for (let k = 0; k < n; k++) { const v = rings[c][(head - 1 - k + rings[c].length) % rings[c].length]; if (v < mn) mn = v; if (v > mx) mx = v; } pp.push(n ? (mx - mn).toFixed(0) : '—'); }
   $('stPP').textContent = pp.map((v, i) => `${CH_NAMES[i]} ${v}`).join('  ');
 }
+
+// ---------- live indices (same engine/thresholds as the report, rolling 40-s window) ----------
+function liveStatus(s) {
+  if (s >= 80) return ['穩定', '#2457a8'];
+  if (s >= 65) return ['留意', '#e8912a'];
+  if (s >= 50) return ['建議追蹤', '#7b56b8'];
+  return ['建議評估', '#c0392b'];
+}
+function setTile(id, score, note) {
+  const t = $(id), b = t.querySelector('b'), u = t.querySelector('u'), e = t.querySelector('em');
+  if (score == null) { b.textContent = '—'; u.style.width = '0'; u.style.background = '#9aa4b2'; e.textContent = note; e.style.background = ''; e.style.color = ''; return; }
+  const [txt, col] = liveStatus(score);
+  b.textContent = score; u.style.width = score + '%'; u.style.background = col; e.textContent = note || txt; e.style.background = col; e.style.color = '#fff';
+}
+let liveBusy = false, lastLiveAt = 0;
+function updateLive() {
+  const active = (ble && ble.isConnected()) || simMode;
+  if (!active) { if (rawFilled === 0) { setTile('liveStress', null, '等待訊號'); setTile('liveFocus', null, '等待訊號'); } return; }
+  if (performance.now() - lastDataAt > 5000) { setTile('liveStress', null, '沒有資料'); setTile('liveFocus', null, '沒有資料'); return; }
+  if (rawFilled < LIVE_N) { const left = Math.ceil((LIVE_N - rawFilled) / RATE); setTile('liveStress', null, `蒐集中 ${left} s`); setTile('liveFocus', null, `蒐集中 ${left} s`); return; }
+  if (liveBusy) return; liveBusy = true;
+  try {
+    const fp1 = new Float32Array(LIVE_N), fp2 = new Float32Array(LIVE_N);
+    for (let i = 0; i < LIVE_N; i++) { const j = (rawHead + i) % LIVE_N; fp1[i] = rawRing[0][j]; fp2[i] = rawRing[1][j]; }
+    const mk = (label, data) => ({ label, unit: 'uV', transducer: 'H3', fs: RATE, pmin: -25207.6, pmax: 25208.3, data });
+    const res = H3.analyze({ start: new Date(), durationSec: LIVE_SEC, nRec: LIVE_SEC, recDur: 1, patient: '', recording: 'live', signals: [mk('EEG1', fp1), mk('EEG2', fp2)] });
+    if (!(res.usableFrac >= 0.5)) { setTile('liveStress', null, '訊號不佳'); setTile('liveFocus', null, '訊號不佳'); }
+    else { setTile('liveStress', res.scores.stress); setTile('liveFocus', res.scores.focus); }
+    lastLiveAt = performance.now();
+  } catch (e) { setTile('liveStress', null, '計算失敗'); setTile('liveFocus', null, '計算失敗'); console.error(e); }
+  finally { liveBusy = false; }
+}
+setInterval(updateLive, 2000);
 
 // ---------- chart ----------
 const canvas = $('chart'); const ctx = canvas.getContext('2d');
