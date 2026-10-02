@@ -399,7 +399,21 @@ else {
   navigator.bluetooth.getAvailability?.().then(ok => log(ok ? '藍牙介面可用' : '藍牙介面不可用：請確認手機藍牙已開啟', ok ? 'ok' : 'err')).catch(() => {});
   log(`瀏覽器：${navigator.userAgent.replace(/^.*?\) /, '').slice(0, 80)}`);
 }
-if (!isNative && 'serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+if (!isNative && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(reg => {
+    reg.addEventListener('updatefound', () => {
+      const nw = reg.installing;
+      if (!nw) return;
+      nw.addEventListener('statechange', () => {
+        if (nw.state === 'activated' && navigator.serviceWorker.controller) {
+          log('偵測到新版本，自動重新載入…', 'ok');
+          setTimeout(() => location.reload(), 800);
+        }
+      });
+    });
+    reg.update();
+  }).catch(() => {});
+}
 
 // ---------- simulation (?sim): replay a captured H3 stream without hardware ----------
 let simStarted = false;
