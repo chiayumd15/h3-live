@@ -40,7 +40,18 @@ const hpAlpha = Math.exp(-2 * Math.PI * 0.5 / RATE);
 const hpPrevIn = new Float32Array(4), hpPrevOut = new Float32Array(4);
 // recording
 let recording = false; let rec = null; let lastRec = null; let simMode = false;
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && ble?.isConnected()) keepAwake(true).catch(() => {}); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  keepAwake(true).catch(() => {});
+  if (userStopped || !device) return;
+  const gap = (performance.now() - lastDataAt) / 1000;
+  if (!ble?.isConnected() || gap > 10) {
+    log('從背景切回：連線已中斷，嘗試重連…', 'warn');
+    reconnectAttempt = 0;
+    try { ble?.disconnect(); } catch {}
+    onDisconnected();
+  }
+});
 
 function setStatus(text, cls) { const s = $('status'); s.textContent = text; s.className = 'status ' + cls; }
 function setButtons() {
@@ -76,11 +87,12 @@ async function openStream() {
   setStatus('連線中…', 'wait');
   await ble.connect(device.id, onDisconnected);
   log('GATT 已連線，訂閱 FFF5 notify…');
-  parser.resync(); // before the first notification, so a device switch is not counted as lost blocks
+  parser.resync();
   await ble.startNotifications(onNotify);
   log('送出串流 ON (KYXB 10 80 00)');
   await writeCmd(CMD_ON);
   startedAt = performance.now(); lastDataAt = startedAt;
+  stalledResends = 0; reconnectAttempt = 0; userStopped = false;
   setStatus(`串流中：${device.name || ''}`, 'on');
   setButtons(); keepAwake(true).then(() => log('螢幕常亮已開啟')).catch((e) => log(`螢幕常亮失敗：${e.message}`, 'warn'));
   clearInterval(stallTimer);
@@ -95,15 +107,16 @@ async function writeCmd(buf) {
 let stalledResends = 0;
 async function watchdog() {
   if (!ble || !ble.isConnected()) return;
+  if (document.visibilityState === 'hidden') return;
   const gap = (performance.now() - lastDataAt) / 1000;
   if (gap > 5) {
-    if (stalledResends < 3) { stalledResends++; log(`${gap.toFixed(0)} 秒沒資料，重送串流 ON（第 ${stalledResends} 次）`, 'warn'); await writeCmd(CMD_ON).catch(() => {}); }
-    else { log('超過 15 秒沒有資料，斷線重連', 'err'); try { await ble.disconnect(); } catch {} onDisconnected(); }
-  } else stalledResends = 0;
+    if (stalledResends < 3) { stalledResends++; setStatus(`訊號中斷 ${gap.toFixed(0)}s…`, 'wait'); log(`${gap.toFixed(0)} 秒沒資料，重送串流 ON（第 ${stalledResends} 次）`, 'warn'); await writeCmd(CMD_ON).catch(() => {}); }
+    else { stalledResends = 0; log('超過 15 秒沒有資料，斷線重連', 'err'); try { await ble.disconnect(); } catch {} onDisconnected(); }
+  } else { stalledResends = 0; if (device) setStatus(`串流中：${device.name || ''}`, 'on'); }
 }
 
 async function disconnect() {
-  userStopped = true; clearInterval(stallTimer);
+  userStopped = true; clearInterval(stallTimer); clearTimeout(reconnectTimer); reconnectAttempt = 0;
   if (recording) stopRecording();
   try { if (ble?.isConnected()) { await writeCmd(CMD_OFF); await new Promise(r => setTimeout(r, 350)); await writeCmd(CMD_OFF); log('已送串流 OFF'); } } catch {}
   try { await ble?.stopNotifications(); } catch {}
@@ -111,18 +124,29 @@ async function disconnect() {
   setStatus('未連線', 'off'); setButtons(); keepAwake(false).catch(() => {});
 }
 
-let reconnectTimer = null;
+let reconnectTimer = null, reconnectAttempt = 0;
+const MAX_RECONNECT = 5;
 function onDisconnected() {
   clearInterval(stallTimer);
-  setStatus('已斷線', 'err'); setButtons();
-  if (userStopped) { log('已斷線'); return; }
-  log('連線中斷，3 秒後自動重連…', 'warn');
+  setButtons();
+  if (userStopped) { setStatus('未連線', 'off'); log('已斷線'); return; }
+  reconnectAttempt++;
+  if (reconnectAttempt > MAX_RECONNECT) {
+    setStatus('重連失敗', 'err');
+    log(`連續 ${MAX_RECONNECT} 次重連失敗，請手動按「連線 H3」`, 'err');
+    userStopped = true; setButtons();
+    return;
+  }
+  const delay = Math.min(3000 * reconnectAttempt, 10000);
+  setStatus(`重連中 ${reconnectAttempt}/${MAX_RECONNECT}…`, 'wait');
+  log(`連線中斷，${(delay / 1000).toFixed(0)} 秒後第 ${reconnectAttempt} 次重連…`, 'warn');
+  $('btnConnect').disabled = true; $('btnDisconnect').disabled = false;
   clearTimeout(reconnectTimer);
   reconnectTimer = setTimeout(async () => {
     if (userStopped) return;
-    try { await openStream(); log('重連成功', 'ok'); }
+    try { await openStream(); reconnectAttempt = 0; log('重連成功', 'ok'); }
     catch (e) { log(`重連失敗：${e.message}`, 'err'); onDisconnected(); }
-  }, 3000);
+  }, delay);
 }
 
 const events = [];
